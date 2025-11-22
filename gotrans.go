@@ -11,7 +11,7 @@ type TranslatableEntity interface {
 }
 
 type Translator[T TranslatableEntity] interface {
-	Translate(ctx context.Context, locales []Lang, entities []T) ([]T, error)
+	Translate(ctx context.Context, locales []Locale, entities []T) ([]T, error)
 }
 
 var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)
@@ -19,13 +19,6 @@ var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)
 type translator[T TranslatableEntity] struct {
 	translationRepository TranslationRepository
 }
-
-/*
-parms, err = r.paramTrans.Translate(ctx, locales, parms)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-*/
 
 func NewTranslator[T TranslatableEntity](
 	translationRepository TranslationRepository,
@@ -37,7 +30,7 @@ func NewTranslator[T TranslatableEntity](
 
 func (t *translator[T]) Translate(
 	ctx context.Context,
-	locales []Lang,
+	locales []Locale,
 	entities []T,
 ) ([]T, error) {
 	const op = "gotrans.Translate"
@@ -49,8 +42,13 @@ func (t *translator[T]) Translate(
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityType = toSnakeCase(entityType)
 
-	entityIDs := ExtractIDs(entities)
-	translations, err := t.translationRepository.GetByEntityAndField(ctx, locales, entityType, entityIDs)
+	entityIDs := extractIDs(entities)
+	translations, err := t.translationRepository.GetByEntityAndField(
+		ctx,
+		locales,
+		entityType,
+		entityIDs,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -63,6 +61,32 @@ func (t *translator[T]) Translate(
 	}
 
 	return entities, nil
+}
+
+func (t *translator[T]) SaveTranslations(
+	ctx context.Context,
+	entities []T,
+) error {
+	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
+	entityName := toSnakeCase(entityType)
+
+	var allTranslations []Translation
+	for _, e := range entities {
+		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e)
+		if err != nil {
+			return err
+		}
+		allTranslations = append(allTranslations, translations...)
+	}
+	if len(allTranslations) == 0 {
+		return nil
+	}
+	if batchRepo, ok := t.translationRepository.(interface {
+		MultiCreate(ctx context.Context, translations []Translation) error
+	}); ok {
+		return batchRepo.MultiCreate(ctx, allTranslations)
+	}
+	return fmt.Errorf("repository does not support MultiCreate")
 }
 
 func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
@@ -90,21 +114,13 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 			if f.IsNil() {
 				f.Set(reflect.MakeMap(f.Type()))
 			}
-			f.SetMapIndex(reflect.ValueOf(tr.Lang), reflect.ValueOf(tr.Value))
+			f.SetMapIndex(reflect.ValueOf(tr.Locale), reflect.ValueOf(tr.Value))
 		}
 	}
 	return nil
 }
 
-func ExtractIDs[T TranslatableEntity](entities []T) []int {
-	ids := make([]int, 0, len(entities))
-	for _, e := range entities {
-		ids = append(ids, e.TranslationEntityID())
-	}
-	return ids
-}
-
-func ExtractTranslations(entityName string, entityID int, entity any) ([]Translation, error) {
+func extractTranslations(entityName string, entityID int, entity any) ([]Translation, error) {
 	var results []Translation
 
 	v := reflect.ValueOf(entity)
@@ -156,25 +172,16 @@ func ApplyTranslations(entity any, translations []Translation) error {
 			if f.IsNil() {
 				f.Set(reflect.MakeMap(f.Type()))
 			}
-			f.SetMapIndex(reflect.ValueOf(tr.Lang), reflect.ValueOf(tr.Value))
+			f.SetMapIndex(reflect.ValueOf(tr.Locale), reflect.ValueOf(tr.Value))
 		}
 	}
 	return nil
 }
 
-type Translation struct {
-	ID       int    `db:"id"`
-	Entity   string `db:"entity"`
-	EntityID int    `db:"entity_id"`
-	Field    string `db:"field"`
-	Lang     Lang   `db:"lang"`
-	Value    string `db:"value"`
-}
+type TranslateField map[Locale]string
 
-type TranslateField map[Lang]string
-
-func (tf TranslateField) Get(lang Lang) string {
-	return tf[lang]
+func (tf TranslateField) Get(locale Locale) string {
+	return tf[locale]
 }
 
 func (tf TranslateField) IsEmpty() bool {
@@ -193,6 +200,14 @@ func filter[T any](in []T, pred func(T) bool) []T {
 		}
 	}
 	return out
+}
+
+func extractIDs[T TranslatableEntity](entities []T) []int {
+	ids := make([]int, 0, len(entities))
+	for _, e := range entities {
+		ids = append(ids, e.TranslationEntityID())
+	}
+	return ids
 }
 
 /**

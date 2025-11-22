@@ -19,7 +19,7 @@ func NewTranslationRepository(db *sqlx.DB) TranslationRepository {
 
 func (t *mysqlTranslationRepository) GetByEntityAndField(
 	ctx context.Context,
-	locales []Lang,
+	locales []Locale,
 	entity string,
 	entityIDs []int,
 ) ([]Translation, error) {

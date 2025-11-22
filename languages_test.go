@@ -4,52 +4,52 @@ import (
 	"testing"
 )
 
-func TestParseLang(t *testing.T) {
+func TestParseLocale(t *testing.T) {
 	tests := []struct {
 		code     string
-		expected Lang
+		expected Locale
 		ok       bool
 	}{
-		{"en", LangEN, true},
-		{"ru", LangRU, true},
-		{"uk", LangUK, true},
-		{"zh-hant", LangZH, true},
-		{"pt-br", LangPT, true},
-		{"unknown", LangNone, false},
-		{"", LangNone, false},
+		{"en", LocaleEN, true},
+		{"ru", LocaleRU, true},
+		{"uk", LocaleUK, true},
+		{"zh-hant", LocaleZH, true},
+		{"pt-br", LocalePT, true},
+		{"unknown", LocaleNone, false},
+		{"", LocaleNone, false},
 	}
 
 	for _, tt := range tests {
-		lang, ok := ParseLang(tt.code)
-		if ok != tt.ok || lang != tt.expected {
-			t.Errorf("ParseLang(%q) = (%v, %v), want (%v, %v)", tt.code, lang, ok, tt.expected, tt.ok)
+		locale, ok := ParseLocale(tt.code)
+		if ok != tt.ok || locale != tt.expected {
+			t.Errorf("ParseLocale(%q) = (%v, %v), want (%v, %v)", tt.code, locale, ok, tt.expected, tt.ok)
 		}
 	}
 }
 
-func TestParseLangList(t *testing.T) {
+func TestParseLocaleList(t *testing.T) {
 	list := "en,ru,uk,unknown"
-	langs := ParseLangList(list)
-	expected := []Lang{LangEN, LangRU, LangUK}
-	if len(langs) != len(expected) {
-		t.Fatalf("ParseLangList(%q) = %v, want %v", list, langs, expected)
+	locales := ParseLocaleList(list)
+	expected := []Locale{LocaleEN, LocaleRU, LocaleUK}
+	if len(locales) != len(expected) {
+		t.Fatalf("ParseLocaleList(%q) = %v, want %v", list, locales, expected)
 	}
-	for i, l := range langs {
+	for i, l := range locales {
 		if l != expected[i] {
-			t.Errorf("ParseLangList: got %v at %d, want %v", l, i, expected[i])
+			t.Errorf("ParseLocaleList: got %v at %d, want %v", l, i, expected[i])
 		}
 	}
 }
 
-func TestLang_Code_Name_String(t *testing.T) {
-	lang := LangRU
-	if lang.Code() != "ru" {
-		t.Errorf("LangRU.Code() = %q, want %q", lang.Code(), "ru")
+func TestLocale_Code_Name_String(t *testing.T) {
+	locale := LocaleRU
+	if locale.Code() != "ru" {
+		t.Errorf("LocaleRU.Code() = %q, want %q", locale.Code(), "ru")
 	}
-	if lang.Name() != "Russian" {
-		t.Errorf("LangRU.Name() = %q, want %q", lang.Name(), "Russian")
+	if locale.Name() != "Russian" {
+		t.Errorf("LocaleRU.Name() = %q, want %q", locale.Name(), "Russian")
 	}
-	if lang.String() != "ru" {
-		t.Errorf("LangRU.String() = %q, want %q", lang.String(), "ru")
+	if locale.String() != "ru" {
+		t.Errorf("LocaleRU.String() = %q, want %q", locale.String(), "ru")
 	}
 }

@@ -2,8 +2,10 @@ package gotrans_test
 
 import (
 	"context"
-	"fmt"
 	"github.com/Ivan-Gorbushko/gotrans"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type Parameter struct {
@@ -14,35 +16,44 @@ type Parameter struct {
 
 func (p Parameter) TranslationEntityID() int { return p.ID }
 
-func ExampleTranslator() {
-	var repo gotrans.TranslationRepository = &mockRepo{}
-
-	// Creating a translator
+func TestReadFromTranslator(t *testing.T) {
+	repo := &mockRepo{}
 	paramTrans := gotrans.NewTranslator[Parameter](repo)
 
-	// Sample data
-	parms := []Parameter{
-		{ID: 1},
-	}
-
-	// Translation
+	parms := []Parameter{{ID: 1}}
 	ctx := context.Background()
-	locales := []gotrans.Lang{gotrans.LangEN, gotrans.LangRU}
+	locales := []gotrans.Locale{gotrans.LocaleEN, gotrans.LocaleRU}
 	parms, err := paramTrans.Translate(ctx, locales, parms)
-	if err != nil {
-		fmt.Println("error:", err)
-		return
-	}
+	require.NoError(t, err)
 
-	fmt.Println(parms[0].Name[gotrans.LangEN])
-	// Output: Example Name EN
+	require.Equal(t, "Example Name EN", parms[0].Name[gotrans.LocaleEN])
+	require.Equal(t, "Пример имени RU", parms[0].Name[gotrans.LocaleRU])
+}
+
+func TestWriteToTranslator(t *testing.T) {
+	repo := &mockRepo{}
+	paramTrans := gotrans.NewTranslator[Parameter](repo)
+
+	parms := []Parameter{{ID: 1}}
+	ctx := context.Background()
+	locales := []gotrans.Locale{gotrans.LocaleEN, gotrans.LocaleRU}
+	parms, err := paramTrans.Translate(ctx, locales, parms)
+	require.NoError(t, err)
+
+	require.Equal(t, "Example Name EN", parms[0].Name[gotrans.LocaleEN])
+	require.Equal(t, "Пример имени RU", parms[0].Name[gotrans.LocaleRU])
 }
 
 type mockRepo struct{}
 
-func (m *mockRepo) GetByEntityAndField(ctx context.Context, locales []gotrans.Lang, entity string, entityIDs []int) ([]gotrans.Translation, error) {
+func (m *mockRepo) GetByEntityAndField(
+	_ context.Context,
+	_ []gotrans.Locale,
+	entity string,
+	entityIDs []int,
+) ([]gotrans.Translation, error) {
 	return []gotrans.Translation{
-		{Entity: "parameter", EntityID: 1, Field: "name", Lang: gotrans.LangEN, Value: "Example Name EN"},
-		{Entity: "parameter", EntityID: 1, Field: "name", Lang: gotrans.LangRU, Value: "Пример имени RU"},
+		{Entity: entity, EntityID: 1, Field: "name", Locale: gotrans.LocaleEN, Value: "Example Name EN"},
+		{Entity: entity, EntityID: 1, Field: "name", Locale: gotrans.LocaleRU, Value: "Пример имени RU"},
 	}, nil
 }

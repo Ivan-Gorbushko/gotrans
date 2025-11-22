@@ -2,51 +2,51 @@ package gotrans
 
 import "strings"
 
-type Lang int16
+type Locale int16
 
 const (
-	LangNone Lang = iota
-	LangSQ        // Albanian
-	LangAR        // Arabic
-	LangAZ        // Azerbaijani
-	LangBS        // Bosnian
-	LangBG        // Bulgarian
-	LangZH        // Chinese
-	LangHR        // Croatian
-	LangCS        // Czech
-	LangDA        // Danish
-	LangNL        // Dutch
-	LangEN        // English
-	LangET        // Estonian
-	LangFI        // Finnish
-	LangFR        // French
-	LangKA        // Georgian
-	LangDE        // German
-	LangEL        // Greek
-	LangHE        // Hebrew
-	LangHU        // Hungarian
-	LangID        // Indonesian
-	LangJA        // Japanese
-	LangKK        // Kazakh
-	LangKO        // Korean
-	LangLV        // Latvian
-	LangLT        // Lithuanian
-	LangMK        // Macedonian
-	LangNO        // Norwegian
-	LangPL        // Polish
-	LangPT        // Portuguese
-	LangRO        // Romanian
-	LangRU        // Russian
-	LangSR        // Serbian
-	LangSK        // Slovak
-	LangSL        // Slovenian
-	LangES        // Spanish
-	LangSV        // Swedish
-	LangTH        // Thai
-	LangTR        // Turkish
-	LangUK        // Ukrainian
-	LangVI        // Vietnamese
-	LangIT        // Italian
+	LocaleNone Locale = iota
+	LocaleSQ          // Albanian
+	LocaleAR          // Arabic
+	LocaleAZ          // Azerbaijani
+	LocaleBS          // Bosnian
+	LocaleBG          // Bulgarian
+	LocaleZH          // Chinese
+	LocaleHR          // Croatian
+	LocaleCS          // Czech
+	LocaleDA          // Danish
+	LocaleNL          // Dutch
+	LocaleEN          // English
+	LocaleET          // Estonian
+	LocaleFI          // Finnish
+	LocaleFR          // French
+	LocaleKA          // Georgian
+	LocaleDE          // German
+	LocaleEL          // Greek
+	LocaleHE          // Hebrew
+	LocaleHU          // Hungarian
+	LocaleID          // Indonesian
+	LocaleJA          // Japanese
+	LocaleKK          // Kazakh
+	LocaleKO          // Korean
+	LocaleLV          // Latvian
+	LocaleLT          // Lithuanian
+	LocaleMK          // Macedonian
+	LocaleNO          // Norwegian
+	LocalePL          // Polish
+	LocalePT          // Portuguese
+	LocaleRO          // Romanian
+	LocaleRU          // Russian
+	LocaleSR          // Serbian
+	LocaleSK          // Slovak
+	LocaleSL          // Slovenian
+	LocaleES          // Spanish
+	LocaleSV          // Swedish
+	LocaleTH          // Thai
+	LocaleTR          // Turkish
+	LocaleUK          // Ukrainian
+	LocaleVI          // Vietnamese
+	LocaleIT          // Italian
 )
 
 type langInfo struct {
@@ -55,93 +55,93 @@ type langInfo struct {
 }
 
 // Main ISO-639-1 registry
-var languages = map[Lang]langInfo{
-	LangSQ: {"sq", "Albanian"},
-	LangAR: {"ar", "Arabic"},
-	LangAZ: {"az", "Azerbaijani"},
-	LangBS: {"bs", "Bosnian"},
-	LangBG: {"bg", "Bulgarian"},
-	LangZH: {"zh", "Chinese"},
-	LangHR: {"hr", "Croatian"},
-	LangCS: {"cs", "Czech"},
-	LangDA: {"da", "Danish"},
-	LangNL: {"nl", "Dutch"},
-	LangEN: {"en", "English"},
-	LangET: {"et", "Estonian"},
-	LangFI: {"fi", "Finnish"},
-	LangFR: {"fr", "French"},
-	LangKA: {"ka", "Georgian"},
-	LangDE: {"de", "German"},
-	LangEL: {"el", "Greek"},
-	LangHE: {"he", "Hebrew"},
-	LangHU: {"hu", "Hungarian"},
-	LangID: {"id", "Indonesia"},
-	LangJA: {"ja", "Japanese"},
-	LangKK: {"kk", "Kazakh"},
-	LangKO: {"ko", "Korean"},
-	LangLV: {"lv", "Latvian"},
-	LangLT: {"lt", "Lithuanian"},
-	LangMK: {"mk", "Macedonian"},
-	LangNO: {"no", "Norwegian"},
-	LangPL: {"pl", "Polish"},
-	LangPT: {"pt", "Portuguese"},
-	LangRO: {"ro", "Romanian"},
-	LangRU: {"ru", "Russian"},
-	LangSR: {"sr", "Serbian"},
-	LangSK: {"sk", "Slovak"},
-	LangSL: {"sl", "Slovenian"},
-	LangES: {"es", "Spanish"},
-	LangSV: {"sv", "Swedish"},
-	LangTH: {"th", "Thai"},
-	LangTR: {"tr", "Turkish"},
-	LangUK: {"uk", "Ukrainian"},
-	LangVI: {"vi", "Vietnamese"},
-	LangIT: {"it", "Italian"},
+var languages = map[Locale]langInfo{
+	LocaleSQ: {"sq", "Albanian"},
+	LocaleAR: {"ar", "Arabic"},
+	LocaleAZ: {"az", "Azerbaijani"},
+	LocaleBS: {"bs", "Bosnian"},
+	LocaleBG: {"bg", "Bulgarian"},
+	LocaleZH: {"zh", "Chinese"},
+	LocaleHR: {"hr", "Croatian"},
+	LocaleCS: {"cs", "Czech"},
+	LocaleDA: {"da", "Danish"},
+	LocaleNL: {"nl", "Dutch"},
+	LocaleEN: {"en", "English"},
+	LocaleET: {"et", "Estonian"},
+	LocaleFI: {"fi", "Finnish"},
+	LocaleFR: {"fr", "French"},
+	LocaleKA: {"ka", "Georgian"},
+	LocaleDE: {"de", "German"},
+	LocaleEL: {"el", "Greek"},
+	LocaleHE: {"he", "Hebrew"},
+	LocaleHU: {"hu", "Hungarian"},
+	LocaleID: {"id", "Indonesia"},
+	LocaleJA: {"ja", "Japanese"},
+	LocaleKK: {"kk", "Kazakh"},
+	LocaleKO: {"ko", "Korean"},
+	LocaleLV: {"lv", "Latvian"},
+	LocaleLT: {"lt", "Lithuanian"},
+	LocaleMK: {"mk", "Macedonian"},
+	LocaleNO: {"no", "Norwegian"},
+	LocalePL: {"pl", "Polish"},
+	LocalePT: {"pt", "Portuguese"},
+	LocaleRO: {"ro", "Romanian"},
+	LocaleRU: {"ru", "Russian"},
+	LocaleSR: {"sr", "Serbian"},
+	LocaleSK: {"sk", "Slovak"},
+	LocaleSL: {"sl", "Slovenian"},
+	LocaleES: {"es", "Spanish"},
+	LocaleSV: {"sv", "Swedish"},
+	LocaleTH: {"th", "Thai"},
+	LocaleTR: {"tr", "Turkish"},
+	LocaleUK: {"uk", "Ukrainian"},
+	LocaleVI: {"vi", "Vietnamese"},
+	LocaleIT: {"it", "Italian"},
 }
 
 // Acceptable aliases, including BCP47 fallbacks
-var aliases = map[string]Lang{
-	"zh-hant": LangZH,
-	"zh-hans": LangZH,
-	"sr-latn": LangSR,
-	"pt-br":   LangPT,
+var aliases = map[string]Locale{
+	"zh-hant": LocaleZH,
+	"zh-hans": LocaleZH,
+	"sr-latn": LocaleSR,
+	"pt-br":   LocalePT,
 }
 
 // Map lookup table
-var codeToLang = func() map[string]Lang {
-	m := make(map[string]Lang)
+var codeToLocale = func() map[string]Locale {
+	m := make(map[string]Locale)
 	for l, info := range languages {
 		m[info.code] = l
 	}
-	for alias, lang := range aliases {
-		m[alias] = lang
+	for alias, locale := range aliases {
+		m[alias] = locale
 	}
 	return m
 }()
 
-// ParseLang returns a Lang enum from a language code (ISO-639-1).
-// Returns (LangNone, false) for unknown codes.
-func ParseLang(code string) (Lang, bool) {
+// ParseLocale returns a Locale enum from a language code (ISO-639-1).
+// Returns (LocaleNone, false) for unknown codes.
+func ParseLocale(code string) (Locale, bool) {
 	code = strings.ToLower(strings.TrimSpace(code))
-	l, ok := codeToLang[code]
+	l, ok := codeToLocale[code]
 	return l, ok
 }
 
-// ParseLangList converts "en,ru,uk" into []Lang.
-func ParseLangList(list string) []Lang {
+// ParseLocaleList converts "en,ru,uk" into []Locale.
+func ParseLocaleList(list string) []Locale {
 	parts := strings.Split(list, ",")
-	res := make([]Lang, 0, len(parts))
+	res := make([]Locale, 0, len(parts))
 
 	for _, p := range parts {
-		if lang, ok := ParseLang(p); ok {
-			res = append(res, lang)
+		if locale, ok := ParseLocale(p); ok {
+			res = append(res, locale)
 		}
 	}
 	return res
 }
 
 // Code returns the ISO-639-1 code for a language.
-func (l Lang) Code() string {
+func (l Locale) Code() string {
 	if info, ok := languages[l]; ok {
 		return info.code
 	}
@@ -149,13 +149,13 @@ func (l Lang) Code() string {
 }
 
 // Name returns the human-readable language name.
-func (l Lang) Name() string {
+func (l Locale) Name() string {
 	if info, ok := languages[l]; ok {
 		return info.name
 	}
 	return ""
 }
 
-func (l Lang) String() string {
+func (l Locale) String() string {
 	return l.Code()
 }
