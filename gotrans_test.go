@@ -15,7 +15,7 @@ type Parameter struct {
 
 func (p Parameter) TranslationEntityID() int { return p.ID }
 
-func TestReadFromTranslator(t *testing.T) {
+func TestLoadTranslations(t *testing.T) {
 	repo := &mockRepo{}
 	paramTrans := NewTranslator[Parameter](repo)
 
@@ -29,7 +29,7 @@ func TestReadFromTranslator(t *testing.T) {
 	require.Equal(t, "Пример имени RU", parms[0].Name[LocaleRU])
 }
 
-func TestWriteToTranslator(t *testing.T) {
+func TestSaveTranslations(t *testing.T) {
 	repo := &mockRepo{}
 	paramTrans := NewTranslator[Parameter](repo)
 
