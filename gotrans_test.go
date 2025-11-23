@@ -48,7 +48,6 @@ func TestWriteToTranslator(t *testing.T) {
 	err := paramTrans.SaveTranslations(ctx, parms)
 	require.NoError(t, err)
 
-	// Проверяем, что переводы сохранились в мок-репозитории
 	require.Len(t, repo.saved, 4)
 	require.Contains(t, repo.saved, Translation{
 		Entity:   "parameter",
