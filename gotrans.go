@@ -11,7 +11,7 @@ type TranslatableEntity interface {
 }
 
 type Translator[T TranslatableEntity] interface {
-	Translate(ctx context.Context, locales []Locale, entities []T) ([]T, error)
+	LoadTranslations(ctx context.Context, locales []Locale, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, entities []T) error
 }
 
@@ -29,12 +29,12 @@ func NewTranslator[T TranslatableEntity](
 	}
 }
 
-func (t *translator[T]) Translate(
+func (t *translator[T]) LoadTranslations(
 	ctx context.Context,
 	locales []Locale,
 	entities []T,
 ) ([]T, error) {
-	const op = "Translate"
+	const op = "translator.LoadTranslations"
 
 	if len(entities) == 0 {
 		return nil, nil
@@ -68,7 +68,7 @@ func (t *translator[T]) SaveTranslations(
 	ctx context.Context,
 	entities []T,
 ) error {
-	const op = "SaveTranslations"
+	const op = "translator.SaveTranslations"
 
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityName := toSnakeCase(entityType)
