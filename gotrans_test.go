@@ -22,7 +22,7 @@ func TestReadFromTranslator(t *testing.T) {
 	parms := []Parameter{{ID: 1}}
 	ctx := context.Background()
 	locales := []Locale{LocaleEN, LocaleRU}
-	parms, err := paramTrans.Translate(ctx, locales, parms)
+	parms, err := paramTrans.LoadTranslations(ctx, locales, parms)
 	require.NoError(t, err)
 
 	require.Equal(t, "Example Name EN", parms[0].Name[LocaleEN])
