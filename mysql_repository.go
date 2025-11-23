@@ -53,3 +53,22 @@ func (t *mysqlTranslationRepository) GetByEntityAndField(
 
 	return allTranslations, nil
 }
+
+func (t *mysqlTranslationRepository) MultiCreate(
+	ctx context.Context,
+	translations []Translation,
+) error {
+	const op = "translationRepository.MultiCreate"
+	if len(translations) == 0 {
+		return nil
+	}
+	query := `
+		INSERT INTO translations (entity, entity_id, field, locale, value)
+		VALUES (:entity, :entity_id, :field, :locale, :value)
+	`
+	_, err := t.db.NamedExecContext(ctx, query, translations)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}

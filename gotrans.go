@@ -67,6 +67,8 @@ func (t *translator[T]) SaveTranslations(
 	ctx context.Context,
 	entities []T,
 ) error {
+	const op = "gotrans.SaveTranslations"
+
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityName := toSnakeCase(entityType)
 
@@ -78,16 +80,32 @@ func (t *translator[T]) SaveTranslations(
 		}
 		allTranslations = append(allTranslations, translations...)
 	}
+
 	if len(allTranslations) == 0 {
 		return nil
 	}
-	if batchRepo, ok := t.translationRepository.(interface {
-		MultiCreate(ctx context.Context, translations []Translation) error
-	}); ok {
-		return batchRepo.MultiCreate(ctx, allTranslations)
+
+	err := t.translationRepository.MultiCreate(ctx, allTranslations)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	return fmt.Errorf("repository does not support MultiCreate")
+
+	return nil
 }
+
+type TranslateField map[Locale]string
+
+func (tf TranslateField) Get(locale Locale) string {
+	return tf[locale]
+}
+
+func (tf TranslateField) IsEmpty() bool {
+	return len(tf) == 0
+}
+
+// ------------------------------------------------
+// --------------- Helpers ------------------------
+// ------------------------------------------------
 
 func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
 	v := reflect.ValueOf(entity).Elem()
@@ -152,45 +170,6 @@ func extractTranslations(entityName string, entityID int, entity any) ([]Transla
 	}
 	return results, nil
 }
-
-func ApplyTranslations(entity any, translations []Translation) error {
-	v := reflect.ValueOf(entity).Elem()
-	t := v.Type()
-
-	fieldMap := make(map[string]int)
-	for i := 0; i < t.NumField(); i++ {
-		fieldMap[toSnakeCase(t.Field(i).Name)] = i
-	}
-
-	for _, tr := range translations {
-		idx, ok := fieldMap[tr.Field]
-		if !ok {
-			continue
-		}
-		f := v.Field(idx)
-		if f.Kind() == reflect.Map && f.Type().AssignableTo(reflect.TypeOf(TranslateField{})) {
-			if f.IsNil() {
-				f.Set(reflect.MakeMap(f.Type()))
-			}
-			f.SetMapIndex(reflect.ValueOf(tr.Locale), reflect.ValueOf(tr.Value))
-		}
-	}
-	return nil
-}
-
-type TranslateField map[Locale]string
-
-func (tf TranslateField) Get(locale Locale) string {
-	return tf[locale]
-}
-
-func (tf TranslateField) IsEmpty() bool {
-	return len(tf) == 0
-}
-
-// ------------------------------------------------
-// --------------- Helpers ------------------------
-// ------------------------------------------------
 
 func filter[T any](in []T, pred func(T) bool) []T {
 	var out []T

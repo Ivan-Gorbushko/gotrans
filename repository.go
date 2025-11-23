@@ -20,4 +20,9 @@ type TranslationRepository interface {
 		entity string,
 		entityIDs []int,
 	) ([]Translation, error)
+
+	MultiCreate(
+		ctx context.Context,
+		translations []Translation,
+	) error
 }
