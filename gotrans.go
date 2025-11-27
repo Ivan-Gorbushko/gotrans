@@ -13,6 +13,7 @@ type TranslatableEntity interface {
 type Translator[T TranslatableEntity] interface {
 	LoadTranslations(ctx context.Context, locales []Locale, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, entities []T) error
+	DeleteTranslations(ctx context.Context, entities []T) error
 }
 
 var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)
@@ -87,6 +88,36 @@ func (t *translator[T]) SaveTranslations(
 	}
 
 	err := t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (t *translator[T]) DeleteTranslations(
+	ctx context.Context,
+	entities []T,
+) error {
+	const op = "translator.DeleteTranslations"
+
+	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
+	entityName := toSnakeCase(entityType)
+
+	var allTranslations []Translation
+	for _, e := range entities {
+		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e)
+		if err != nil {
+			return err
+		}
+		allTranslations = append(allTranslations, translations...)
+	}
+
+	if len(allTranslations) == 0 {
+		return nil
+	}
+
+	err := t.translationRepository.MassDelete(ctx, allTranslations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
