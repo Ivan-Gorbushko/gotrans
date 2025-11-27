@@ -79,6 +79,33 @@ func TestSaveTranslations(t *testing.T) {
 	})
 }
 
+func TestDeleteTranslations(t *testing.T) {
+	repo := &mockRepo{}
+	paramTrans := NewTranslator[Parameter](repo)
+
+	// Saving translations
+	parms := []Parameter{{
+		ID: 1,
+		Name: TranslateField{
+			LocaleEN: "Name EN",
+			LocaleRU: "Имя RU",
+		},
+		Description: TranslateField{
+			LocaleEN: "Desc EN",
+			LocaleRU: "Описание RU",
+		},
+	}}
+	ctx := context.Background()
+	err := paramTrans.SaveTranslations(ctx, parms)
+	require.NoError(t, err)
+	require.Len(t, repo.saved, 4)
+
+	// Delete translations
+	err = paramTrans.DeleteTranslations(ctx, parms)
+	require.NoError(t, err)
+	require.Len(t, repo.saved, 0)
+}
+
 type mockRepo struct {
 	saved []Translation
 }
