@@ -14,14 +14,24 @@ type Translation struct {
 }
 
 type TranslationRepository interface {
-	GetByEntityAndField(
+	GetTranslations(
 		ctx context.Context,
 		locales []Locale,
 		entity string,
 		entityIDs []int,
 	) ([]Translation, error)
 
-	MultiCreate(
+	MassCreate(
+		ctx context.Context,
+		translations []Translation,
+	) error
+
+	MassDelete(
+		ctx context.Context,
+		translations []Translation,
+	) error
+
+	MassCreateOrUpdate(
 		ctx context.Context,
 		translations []Translation,
 	) error

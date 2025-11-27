@@ -44,7 +44,7 @@ func (t *translator[T]) LoadTranslations(
 	entityType = toSnakeCase(entityType)
 
 	entityIDs := extractIDs(entities)
-	translations, err := t.translationRepository.GetByEntityAndField(
+	translations, err := t.translationRepository.GetTranslations(
 		ctx,
 		locales,
 		entityType,
@@ -86,7 +86,7 @@ func (t *translator[T]) SaveTranslations(
 		return nil
 	}
 
-	err := t.translationRepository.MultiCreate(ctx, allTranslations)
+	err := t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

@@ -17,7 +17,7 @@ func NewTranslationRepository(db *sqlx.DB) TranslationRepository {
 	return &mysqlTranslationRepository{db: db}
 }
 
-func (t *mysqlTranslationRepository) GetByEntityAndField(
+func (t *mysqlTranslationRepository) GetTranslations(
 	ctx context.Context,
 	locales []Locale,
 	entity string,
@@ -54,56 +54,32 @@ func (t *mysqlTranslationRepository) GetByEntityAndField(
 	return allTranslations, nil
 }
 
-//func (t *mysqlTranslationRepository) MultiCreate(
-//	ctx context.Context,
-//	translations []Translation,
-//) error {
-//	const op = "translationRepository.MultiCreate"
-//	if len(translations) == 0 {
-//		return nil
-//	}
-//
-//	// Collect unique entity, entity_id, field, locale for deletion
-//	type key struct {
-//		Entity   string
-//		EntityID int
-//		Field    string
-//		Locale   Locale
-//	}
-//	keys := make(map[key]struct{})
-//	for _, tr := range translations {
-//		keys[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
-//	}
-//
-//	// Deleting old translations
-//	for k := range keys {
-//		_, err := t.db.ExecContext(
-//			ctx,
-//			`DELETE FROM translations WHERE entity = ? AND entity_id = ? AND field = ? AND locale = ?`,
-//			k.Entity, k.EntityID, k.Field, k.Locale,
-//		)
-//		if err != nil {
-//			return fmt.Errorf("%s: %w", op, err)
-//		}
-//	}
-//
-//	// Insert new translations
-//	query := `
-//		INSERT INTO translations (entity, entity_id, field, locale, value)
-//		VALUES (:entity, :entity_id, :field, :locale, :value)
-//	`
-//	_, err := t.db.NamedExecContext(ctx, query, translations)
-//	if err != nil {
-//		return fmt.Errorf("%s: %w", op, err)
-//	}
-//	return nil
-//}
-
-func (t *mysqlTranslationRepository) MultiCreate(
+func (t *mysqlTranslationRepository) MassCreate(
 	ctx context.Context,
 	translations []Translation,
 ) error {
-	const op = "translationRepository.MultiCreate"
+	const op = "translationRepository.MassCreate"
+	if len(translations) == 0 {
+		return nil
+	}
+
+	// Inserting new translations
+	insertQuery := `
+		INSERT INTO translations (entity, entity_id, field, locale, value)
+		VALUES (:entity, :entity_id, :field, :locale, :value)
+	`
+	_, err := t.db.NamedExecContext(ctx, insertQuery, translations)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (t *mysqlTranslationRepository) MassDelete(
+	ctx context.Context,
+	translations []Translation,
+) error {
+	const op = "translationRepository.MassDelete"
 	if len(translations) == 0 {
 		return nil
 	}
@@ -140,20 +116,35 @@ func (t *mysqlTranslationRepository) MultiCreate(
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
+
 	query = t.db.Rebind(query)
+
 	_, err = t.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	// Inserting new translations
-	insertQuery := `
-		INSERT INTO translations (entity, entity_id, field, locale, value)
-		VALUES (:entity, :entity_id, :field, :locale, :value)
-	`
-	_, err = t.db.NamedExecContext(ctx, insertQuery, translations)
+	return nil
+}
+
+func (t *mysqlTranslationRepository) MassCreateOrUpdate(
+	ctx context.Context,
+	translations []Translation,
+) error {
+	const op = "translationRepository.MassCreateOrUpdate"
+	if len(translations) == 0 {
+		return nil
+	}
+
+	err := t.MassDelete(ctx, translations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
+
+	err = t.MassCreate(ctx, translations)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
 	return nil
 }
