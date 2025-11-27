@@ -54,6 +54,51 @@ func (t *mysqlTranslationRepository) GetByEntityAndField(
 	return allTranslations, nil
 }
 
+//func (t *mysqlTranslationRepository) MultiCreate(
+//	ctx context.Context,
+//	translations []Translation,
+//) error {
+//	const op = "translationRepository.MultiCreate"
+//	if len(translations) == 0 {
+//		return nil
+//	}
+//
+//	// Collect unique entity, entity_id, field, locale for deletion
+//	type key struct {
+//		Entity   string
+//		EntityID int
+//		Field    string
+//		Locale   Locale
+//	}
+//	keys := make(map[key]struct{})
+//	for _, tr := range translations {
+//		keys[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
+//	}
+//
+//	// Deleting old translations
+//	for k := range keys {
+//		_, err := t.db.ExecContext(
+//			ctx,
+//			`DELETE FROM translations WHERE entity = ? AND entity_id = ? AND field = ? AND locale = ?`,
+//			k.Entity, k.EntityID, k.Field, k.Locale,
+//		)
+//		if err != nil {
+//			return fmt.Errorf("%s: %w", op, err)
+//		}
+//	}
+//
+//	// Insert new translations
+//	query := `
+//		INSERT INTO translations (entity, entity_id, field, locale, value)
+//		VALUES (:entity, :entity_id, :field, :locale, :value)
+//	`
+//	_, err := t.db.NamedExecContext(ctx, query, translations)
+//	if err != nil {
+//		return fmt.Errorf("%s: %w", op, err)
+//	}
+//	return nil
+//}
+
 func (t *mysqlTranslationRepository) MultiCreate(
 	ctx context.Context,
 	translations []Translation,
@@ -62,11 +107,51 @@ func (t *mysqlTranslationRepository) MultiCreate(
 	if len(translations) == 0 {
 		return nil
 	}
-	query := `
+
+	// Collect unique keys for deletion
+	type key struct {
+		Entity   string
+		EntityID int
+		Field    string
+		Locale   Locale
+	}
+	keys := make(map[key]struct{})
+	for _, tr := range translations {
+		keys[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
+	}
+
+	// Forming slices for mass deletion
+	var entities []string
+	var entityIDs []int
+	var fields []string
+	var locales []Locale
+	for k := range keys {
+		entities = append(entities, k.Entity)
+		entityIDs = append(entityIDs, k.EntityID)
+		fields = append(fields, k.Field)
+		locales = append(locales, k.Locale)
+	}
+
+	// Mass deletion
+	query, args, err := sqlx.In(`
+		DELETE FROM translations
+		WHERE entity IN (?) AND entity_id IN (?) AND field IN (?) AND locale IN (?)
+	`, entities, entityIDs, fields, locales)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	query = t.db.Rebind(query)
+	_, err = t.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	// Inserting new translations
+	insertQuery := `
 		INSERT INTO translations (entity, entity_id, field, locale, value)
 		VALUES (:entity, :entity_id, :field, :locale, :value)
 	`
-	_, err := t.db.NamedExecContext(ctx, query, translations)
+	_, err = t.db.NamedExecContext(ctx, insertQuery, translations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
