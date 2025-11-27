@@ -83,7 +83,7 @@ type mockRepo struct {
 	saved []Translation
 }
 
-func (m *mockRepo) GetByEntityAndField(
+func (m *mockRepo) GetTranslations(
 	_ context.Context,
 	_ []Locale,
 	entity string,
@@ -95,10 +95,44 @@ func (m *mockRepo) GetByEntityAndField(
 	}, nil
 }
 
-func (m *mockRepo) MultiCreate(
+func (m *mockRepo) MassCreate(
 	_ context.Context,
 	translations []Translation,
 ) error {
 	m.saved = append(m.saved, translations...)
 	return nil
+}
+
+func (m *mockRepo) MassDelete(
+	_ context.Context,
+	translations []Translation,
+) error {
+	// Remove all translations matching the key from saved
+	type key struct {
+		Entity   string
+		EntityID int
+		Field    string
+		Locale   Locale
+	}
+	toDelete := make(map[key]struct{})
+	for _, tr := range translations {
+		toDelete[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
+	}
+	var filtered []Translation
+	for _, tr := range m.saved {
+		k := key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}
+		if _, ok := toDelete[k]; !ok {
+			filtered = append(filtered, tr)
+		}
+	}
+	m.saved = filtered
+	return nil
+}
+
+func (m *mockRepo) MassCreateOrUpdate(
+	ctx context.Context,
+	translations []Translation,
+) error {
+	_ = m.MassDelete(ctx, translations)
+	return m.MassCreate(ctx, translations)
 }
