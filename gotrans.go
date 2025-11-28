@@ -13,7 +13,13 @@ type TranslatableEntity interface {
 type Translator[T TranslatableEntity] interface {
 	LoadTranslations(ctx context.Context, locales []Locale, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, entities []T) error
-	DeleteTranslations(ctx context.Context, entities []T) error
+	DeleteTranslations(
+		ctx context.Context,
+		Entity string,
+		EntityIDs []int,
+		Fields []string,
+		Locales []Locale,
+	) error
 }
 
 var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)

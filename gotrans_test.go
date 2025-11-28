@@ -83,7 +83,7 @@ func TestDeleteTranslations(t *testing.T) {
 	repo := &mockRepo{}
 	paramTrans := NewTranslator[Parameter](repo)
 
-	// Saving translations
+	// Сохраняем переводы
 	parms := []Parameter{{
 		ID: 1,
 		Name: TranslateField{
@@ -100,8 +100,12 @@ func TestDeleteTranslations(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 4)
 
-	// Delete translations
-	err = paramTrans.DeleteTranslations(ctx, parms)
+	// Удаляем переводы
+	entity := "parameter"
+	entityIDs := []int{1}
+	fields := []string{"name", "description"}
+	locales := []Locale{LocaleEN, LocaleRU}
+	err = repo.MassDelete(ctx, entity, entityIDs, fields, locales)
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 0)
 }
@@ -132,9 +136,12 @@ func (m *mockRepo) MassCreate(
 
 func (m *mockRepo) MassDelete(
 	_ context.Context,
-	translations []Translation,
+	entity string,
+	entityIDs []int,
+	fields []string,
+	locales []Locale,
 ) error {
-	// Remove all translations matching the key from saved
+	// Удаляем переводы по ключу
 	type key struct {
 		Entity   string
 		EntityID int
@@ -142,8 +149,12 @@ func (m *mockRepo) MassDelete(
 		Locale   Locale
 	}
 	toDelete := make(map[key]struct{})
-	for _, tr := range translations {
-		toDelete[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
+	for _, id := range entityIDs {
+		for _, field := range fields {
+			for _, locale := range locales {
+				toDelete[key{entity, id, field, locale}] = struct{}{}
+			}
+		}
 	}
 	var filtered []Translation
 	for _, tr := range m.saved {
@@ -160,6 +171,47 @@ func (m *mockRepo) MassCreateOrUpdate(
 	ctx context.Context,
 	translations []Translation,
 ) error {
-	_ = m.MassDelete(ctx, translations)
+	// Группируем по entity, entityID, field, locale
+	entityMap := make(map[string]map[int]map[string]map[Locale]string)
+	for _, tr := range translations {
+		if _, ok := entityMap[tr.Entity]; !ok {
+			entityMap[tr.Entity] = make(map[int]map[string]map[Locale]string)
+		}
+		if _, ok := entityMap[tr.Entity][tr.EntityID]; !ok {
+			entityMap[tr.Entity][tr.EntityID] = make(map[string]map[Locale]string)
+		}
+		if _, ok := entityMap[tr.Entity][tr.EntityID][tr.Field]; !ok {
+			entityMap[tr.Entity][tr.EntityID][tr.Field] = make(map[Locale]string)
+		}
+		entityMap[tr.Entity][tr.EntityID][tr.Field][tr.Locale] = tr.Value
+	}
+	// Собираем параметры для MassDelete
+	for entity, ids := range entityMap {
+		var entityIDs []int
+		var fields []string
+		var locales []Locale
+		idSet := make(map[int]struct{})
+		fieldSet := make(map[string]struct{})
+		localeSet := make(map[Locale]struct{})
+		for id, flds := range ids {
+			idSet[id] = struct{}{}
+			for field, locs := range flds {
+				fieldSet[field] = struct{}{}
+				for locale := range locs {
+					localeSet[locale] = struct{}{}
+				}
+			}
+		}
+		for id := range idSet {
+			entityIDs = append(entityIDs, id)
+		}
+		for field := range fieldSet {
+			fields = append(fields, field)
+		}
+		for locale := range localeSet {
+			locales = append(locales, locale)
+		}
+		_ = m.MassDelete(ctx, entity, entityIDs, fields, locales)
+	}
 	return m.MassCreate(ctx, translations)
 }
