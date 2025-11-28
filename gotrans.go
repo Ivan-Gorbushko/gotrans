@@ -25,14 +25,17 @@ type Translator[T TranslatableEntity] interface {
 var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)
 
 type translator[T TranslatableEntity] struct {
-	translationRepository TranslationRepository
+	Locales               []Locale
+	TranslationRepository TranslationRepository
 }
 
 func NewTranslator[T TranslatableEntity](
+	locales []Locale,
 	translationRepository TranslationRepository,
 ) Translator[T] {
 	return &translator[T]{
-		translationRepository: translationRepository,
+		Locales:               locales,
+		TranslationRepository: translationRepository,
 	}
 }
 
@@ -51,7 +54,7 @@ func (t *translator[T]) LoadTranslations(
 	entityType = toSnakeCase(entityType)
 
 	entityIDs := extractIDs(entities)
-	translations, err := t.translationRepository.GetTranslations(
+	translations, err := t.TranslationRepository.GetTranslations(
 		ctx,
 		locales,
 		entityType,
@@ -93,7 +96,7 @@ func (t *translator[T]) SaveTranslations(
 		return nil
 	}
 
-	err := t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
+	err := t.TranslationRepository.MassCreateOrUpdate(ctx, allTranslations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -110,7 +113,7 @@ func (t *translator[T]) DeleteTranslations(
 ) error {
 	const op = "translator.DeleteTranslations"
 
-	err := t.translationRepository.MassDelete(
+	err := t.TranslationRepository.MassDelete(
 		ctx,
 		Entity,
 		EntityIDs,
