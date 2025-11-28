@@ -84,22 +84,39 @@ func (t *mysqlTranslationRepository) MassDelete(
 ) error {
 	const op = "translationRepository.MassDelete"
 
-	// Mass deletion based on input parameters
-	query, args, err := sqlx.In(`
-		DELETE FROM translations
-		WHERE entity = ? AND entity_id IN (?) AND field IN (?) AND locale IN (?)
-	`, Entity, EntityIDs, Fields, Locales)
+	// Basic query and arguments
+	query := "DELETE FROM translations WHERE entity = ?"
+	args := []any{Entity}
+
+	if len(EntityIDs) > 0 {
+		query += " AND entity_id IN (?)"
+		args = append(args, EntityIDs)
+	}
+	if len(Fields) > 0 {
+		query += " AND field IN (?)"
+		args = append(args, Fields)
+	}
+	if len(Locales) > 0 {
+		query += " AND locale IN (?)"
+		args = append(args, Locales)
+	}
+
+	// TODO: Need review this logic
+	// If only entity — do not delete anything
+	//if len(args) == 1 {
+	//	return nil
+	//}
+
+	query, args, err := sqlx.In(query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
-
 	query = t.db.Rebind(query)
 
 	_, err = t.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
-
 	return nil
 }
 
