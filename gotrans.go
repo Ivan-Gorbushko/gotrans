@@ -97,27 +97,20 @@ func (t *translator[T]) SaveTranslations(
 
 func (t *translator[T]) DeleteTranslations(
 	ctx context.Context,
-	entities []T,
+	Entity string,
+	EntityIDs []int,
+	Fields []string,
+	Locales []Locale,
 ) error {
 	const op = "translator.DeleteTranslations"
 
-	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
-	entityName := toSnakeCase(entityType)
-
-	var allTranslations []Translation
-	for _, e := range entities {
-		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e)
-		if err != nil {
-			return err
-		}
-		allTranslations = append(allTranslations, translations...)
-	}
-
-	if len(allTranslations) == 0 {
-		return nil
-	}
-
-	err := t.translationRepository.MassDelete(ctx, allTranslations)
+	err := t.translationRepository.MassDelete(
+		ctx,
+		Entity,
+		EntityIDs,
+		Fields,
+		Locales,
+	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

@@ -77,42 +77,18 @@ func (t *mysqlTranslationRepository) MassCreate(
 
 func (t *mysqlTranslationRepository) MassDelete(
 	ctx context.Context,
-	translations []Translation,
+	Entity string,
+	EntityIDs []int,
+	Fields []string,
+	Locales []Locale,
 ) error {
 	const op = "translationRepository.MassDelete"
-	if len(translations) == 0 {
-		return nil
-	}
 
-	// Collect unique keys for deletion
-	type key struct {
-		Entity   string
-		EntityID int
-		Field    string
-		Locale   Locale
-	}
-	keys := make(map[key]struct{})
-	for _, tr := range translations {
-		keys[key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}] = struct{}{}
-	}
-
-	// Forming slices for mass deletion
-	var entities []string
-	var entityIDs []int
-	var fields []string
-	var locales []Locale
-	for k := range keys {
-		entities = append(entities, k.Entity)
-		entityIDs = append(entityIDs, k.EntityID)
-		fields = append(fields, k.Field)
-		locales = append(locales, k.Locale)
-	}
-
-	// Mass deletion
+	// Mass deletion based on input parameters
 	query, args, err := sqlx.In(`
 		DELETE FROM translations
-		WHERE entity IN (?) AND entity_id IN (?) AND field IN (?) AND locale IN (?)
-	`, entities, entityIDs, fields, locales)
+		WHERE entity = ? AND entity_id IN (?) AND field IN (?) AND locale IN (?)
+	`, Entity, EntityIDs, Fields, Locales)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -136,13 +112,48 @@ func (t *mysqlTranslationRepository) MassCreateOrUpdate(
 		return nil
 	}
 
-	err := t.MassDelete(ctx, translations)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+	// Group translations by entity
+	type deleteParams struct {
+		IDs     map[int]struct{}
+		Fields  map[string]struct{}
+		Locales map[Locale]struct{}
+	}
+	entityMap := make(map[string]*deleteParams)
+
+	for _, tr := range translations {
+		if _, ok := entityMap[tr.Entity]; !ok {
+			entityMap[tr.Entity] = &deleteParams{
+				IDs:     make(map[int]struct{}),
+				Fields:  make(map[string]struct{}),
+				Locales: make(map[Locale]struct{}),
+			}
+		}
+		entityMap[tr.Entity].IDs[tr.EntityID] = struct{}{}
+		entityMap[tr.Entity].Fields[tr.Field] = struct{}{}
+		entityMap[tr.Entity].Locales[tr.Locale] = struct{}{}
 	}
 
-	err = t.MassCreate(ctx, translations)
-	if err != nil {
+	// Remove translations for each entity
+	for entity, params := range entityMap {
+		var ids []int
+		for id := range params.IDs {
+			ids = append(ids, id)
+		}
+		var fields []string
+		for f := range params.Fields {
+			fields = append(fields, f)
+		}
+		var locales []Locale
+		for l := range params.Locales {
+			locales = append(locales, l)
+		}
+		if err := t.MassDelete(ctx, entity, ids, fields, locales); err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+	}
+
+	// Saving new translations
+	if err := t.MassCreate(ctx, translations); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 

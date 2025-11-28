@@ -28,7 +28,10 @@ type TranslationRepository interface {
 
 	MassDelete(
 		ctx context.Context,
-		translations []Translation,
+		Entity string,
+		EntityIDs []int,
+		Fields []string,
+		Locales []Locale,
 	) error
 
 	MassCreateOrUpdate(
