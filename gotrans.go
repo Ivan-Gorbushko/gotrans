@@ -132,6 +132,8 @@ func (t *translator[T]) DeleteTranslations(
 	return nil
 }
 
+// TranslateField represents translatable fields.
+// swagger:model
 type TranslateField map[Locale]string
 
 func (tf TranslateField) Get(locale Locale) string {
