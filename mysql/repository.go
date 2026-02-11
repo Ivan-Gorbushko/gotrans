@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Ivan-Gorbushko/gotrans"
+	"github.com/ivan-gorbushko/gotrans"
 	"github.com/jmoiron/sqlx"
 )
 
