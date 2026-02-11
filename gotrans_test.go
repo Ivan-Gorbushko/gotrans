@@ -17,11 +17,11 @@ func (p Parameter) TranslationEntityID() int { return p.ID }
 
 func TestLoadTranslations(t *testing.T) {
 	repo := &mockRepo{}
-	paramTrans := NewTranslator[Parameter](repo)
+	locales := []Locale{LocaleEN, LocaleRU}
+	paramTrans := NewTranslator[Parameter](locales, repo)
 
 	parms := []Parameter{{ID: 1}}
 	ctx := context.Background()
-	locales := []Locale{LocaleEN, LocaleRU}
 	parms, err := paramTrans.LoadTranslations(ctx, locales, parms)
 	require.NoError(t, err)
 
@@ -31,7 +31,8 @@ func TestLoadTranslations(t *testing.T) {
 
 func TestSaveTranslations(t *testing.T) {
 	repo := &mockRepo{}
-	paramTrans := NewTranslator[Parameter](repo)
+	locales := []Locale{LocaleEN, LocaleRU}
+	paramTrans := NewTranslator[Parameter](locales, repo)
 
 	parms := []Parameter{{
 		ID: 1,
@@ -81,9 +82,10 @@ func TestSaveTranslations(t *testing.T) {
 
 func TestDeleteTranslations(t *testing.T) {
 	repo := &mockRepo{}
-	paramTrans := NewTranslator[Parameter](repo)
+	locales := []Locale{LocaleEN, LocaleRU}
+	paramTrans := NewTranslator[Parameter](locales, repo)
 
-	// Сохраняем переводы
+	// Saving translations
 	parms := []Parameter{{
 		ID: 1,
 		Name: TranslateField{
@@ -100,11 +102,10 @@ func TestDeleteTranslations(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 4)
 
-	// Удаляем переводы
+	// Delete translations
 	entity := "parameter"
 	entityIDs := []int{1}
 	fields := []string{"name", "description"}
-	locales := []Locale{LocaleEN, LocaleRU}
 	err = repo.MassDelete(ctx, entity, entityIDs, fields, locales)
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 0)
@@ -118,7 +119,7 @@ func (m *mockRepo) GetTranslations(
 	_ context.Context,
 	_ []Locale,
 	entity string,
-	entityIDs []int,
+	_ []int,
 ) ([]Translation, error) {
 	return []Translation{
 		{Entity: entity, EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Example Name EN"},
@@ -141,7 +142,7 @@ func (m *mockRepo) MassDelete(
 	fields []string,
 	locales []Locale,
 ) error {
-	// Удаляем переводы по ключу
+	// Delete translations by key
 	type key struct {
 		Entity   string
 		EntityID int
@@ -171,7 +172,7 @@ func (m *mockRepo) MassCreateOrUpdate(
 	ctx context.Context,
 	translations []Translation,
 ) error {
-	// Группируем по entity, entityID, field, locale
+	// Group by entity, entityID, field, locale
 	entityMap := make(map[string]map[int]map[string]map[Locale]string)
 	for _, tr := range translations {
 		if _, ok := entityMap[tr.Entity]; !ok {
@@ -185,7 +186,7 @@ func (m *mockRepo) MassCreateOrUpdate(
 		}
 		entityMap[tr.Entity][tr.EntityID][tr.Field][tr.Locale] = tr.Value
 	}
-	// Собираем параметры для MassDelete
+	// Collecting parameters for MassDelete
 	for entity, ids := range entityMap {
 		var entityIDs []int
 		var fields []string
