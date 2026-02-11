@@ -117,9 +117,9 @@ func (t *translationRepository) MassDelete(
 		query += " AND field IN (?)"
 		args = append(args, fields)
 	}
-	if len(locales) > 0 {
+	if len(mysqlLocales) > 0 {
 		query += " AND locale IN (?)"
-		args = append(args, locales)
+		args = append(args, mysqlLocales)
 	}
 
 	// TODO: Need review this logic
