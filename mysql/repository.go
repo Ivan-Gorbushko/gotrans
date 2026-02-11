@@ -57,7 +57,7 @@ func (t *translationRepository) GetTranslations(
 	}
 
 	// Converting to domain repository model
-	allTranslations := make([]gotrans.Translation, 0, len(allMysqlTranslations))
+	allTranslations := make([]gotrans.Translation, len(allMysqlTranslations))
 	for i := range allMysqlTranslations {
 		allTranslations[i] = toTranslateModel(allMysqlTranslations[i])
 	}
@@ -93,28 +93,33 @@ func (t *translationRepository) MassCreate(
 
 func (t *translationRepository) MassDelete(
 	ctx context.Context,
-	Entity string,
-	EntityIDs []int,
-	Fields []string,
-	Locales []gotrans.Locale,
+	entity string,
+	entityIDs []int,
+	fields []string,
+	locales []gotrans.Locale,
 ) error {
 	const op = "translationRepository.MassDelete"
 
+	mysqlLocales := make([]string, len(locales))
+	for i, l := range locales {
+		mysqlLocales[i] = l.String()
+	}
+
 	// Basic query and arguments
 	query := "DELETE FROM translations WHERE entity = ?"
-	args := []any{Entity}
+	args := []any{entity}
 
-	if len(EntityIDs) > 0 {
+	if len(entityIDs) > 0 {
 		query += " AND entity_id IN (?)"
-		args = append(args, EntityIDs)
+		args = append(args, entityIDs)
 	}
-	if len(Fields) > 0 {
+	if len(fields) > 0 {
 		query += " AND field IN (?)"
-		args = append(args, Fields)
+		args = append(args, fields)
 	}
-	if len(Locales) > 0 {
+	if len(mysqlLocales) > 0 {
 		query += " AND locale IN (?)"
-		args = append(args, Locales)
+		args = append(args, mysqlLocales)
 	}
 
 	// TODO: Need review this logic
