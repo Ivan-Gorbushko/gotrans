@@ -28,6 +28,10 @@ func (t *translationRepository) GetTranslations(
 	const batchSize = 1000
 
 	var allMysqlTranslations []Translation
+	mysqlLocales := make([]string, len(locales))
+	for i, l := range locales {
+		mysqlLocales[i] = l.String()
+	}
 
 	for start := 0; start < len(entityIDs); start += batchSize {
 		end := start + batchSize
@@ -38,7 +42,7 @@ func (t *translationRepository) GetTranslations(
 
 		query, args, err := sqlx.In(`
 			SELECT * FROM translations WHERE entity = ? AND locale IN (?) AND entity_id IN (?)
-		`, entity, locales, batchIDs)
+		`, entity, mysqlLocales, batchIDs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
@@ -52,7 +56,7 @@ func (t *translationRepository) GetTranslations(
 		allMysqlTranslations = append(allMysqlTranslations, translations...)
 	}
 
-	// Converting to repository model
+	// Converting to domain repository model
 	allTranslations := make([]gotrans.Translation, 0, len(allMysqlTranslations))
 	for i := range allMysqlTranslations {
 		allTranslations[i] = toTranslateModel(allMysqlTranslations[i])
