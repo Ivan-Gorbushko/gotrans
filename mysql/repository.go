@@ -57,7 +57,7 @@ func (t *translationRepository) GetTranslations(
 	}
 
 	// Converting to domain repository model
-	allTranslations := make([]gotrans.Translation, 0, len(allMysqlTranslations))
+	allTranslations := make([]gotrans.Translation, len(allMysqlTranslations))
 	for i := range allMysqlTranslations {
 		allTranslations[i] = toTranslateModel(allMysqlTranslations[i])
 	}
