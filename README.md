@@ -75,4 +75,4 @@ COLLATE = utf8mb4_unicode_ci;
 - Easy integration with any Go project.
 
 ## Example with SQLite
-See `example/sqlite_example.go` for a full working demo with SQLite.
+See `example/main.go` for a full working demo with SQLite.
