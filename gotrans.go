@@ -2,7 +2,6 @@ package gotrans
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 )
 
@@ -14,155 +13,81 @@ type Translatable interface {
 	TranslatableFieldMap() map[string]string
 }
 
+// Translator interface for single-locale translation operations
+// All translation operations now work with a single locale and string fields
+// Example usage: LoadTranslations(ctx, locale, entities)
 type Translator[T Translatable] interface {
-	LoadTranslations(ctx context.Context, locales []Locale, entities []T) ([]T, error)
-	SaveTranslations(ctx context.Context, entities []T) error
-	DeleteTranslations(
-		ctx context.Context,
-		Entity string,
-		EntityIDs []int,
-		Fields []string,
-		Locales []Locale,
-	) error
-	SupportedLocales() []Locale
+	LoadTranslations(ctx context.Context, locale Locale, entities []T) ([]T, error)
+	SaveTranslations(ctx context.Context, locale Locale, entities []T) error
+	DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error
 }
 
 var _ Translator[Translatable] = (*translator[Translatable])(nil)
 
 type translator[T Translatable] struct {
-	locales               []Locale
 	translationRepository TranslationRepository
 }
 
-func NewTranslator[T Translatable](
-	locales []Locale,
-	translationRepository TranslationRepository,
-) Translator[T] {
+func NewTranslator[T Translatable](translationRepository TranslationRepository) Translator[T] {
 	return &translator[T]{
-		locales:               locales,
 		translationRepository: translationRepository,
 	}
 }
 
-func (t *translator[T]) SupportedLocales() []Locale {
-	return t.locales
-}
-
-func (t *translator[T]) LoadTranslations(
-	ctx context.Context,
-	locales []Locale,
-	entities []T,
-) ([]T, error) {
-	const op = "translator.LoadTranslations"
-
+func (t *translator[T]) LoadTranslations(ctx context.Context, locale Locale, entities []T) ([]T, error) {
 	if len(entities) == 0 {
 		return nil, nil
 	}
-
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityType = toSnakeCase(entityType)
-
 	entityIDs := extractIDs(entities)
-	translations, err := t.translationRepository.GetTranslations(
-		ctx,
-		locales,
-		entityType,
-		entityIDs,
-	)
+	translations, err := t.translationRepository.GetTranslations(ctx, []Locale{locale}, entityType, entityIDs)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, err
 	}
-
 	for i := range entities {
-		err = t.applyTranslations(&entities[i], translations)
+		err = t.applyTranslations(&entities[i], locale, translations)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
+			return nil, err
 		}
 	}
-
 	return entities, nil
 }
 
-func (t *translator[T]) SaveTranslations(
-	ctx context.Context,
-	entities []T,
-) error {
-	const op = "translator.SaveTranslations"
-
+func (t *translator[T]) SaveTranslations(ctx context.Context, locale Locale, entities []T) error {
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityName := toSnakeCase(entityType)
-
 	var allTranslations []Translation
 	for _, e := range entities {
-		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e)
+		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, locale)
 		if err != nil {
 			return err
 		}
 		allTranslations = append(allTranslations, translations...)
 	}
-
 	if len(allTranslations) == 0 {
 		return nil
 	}
-
-	err := t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	return nil
+	return t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
 }
 
-func (t *translator[T]) DeleteTranslations(
-	ctx context.Context,
-	Entity string,
-	EntityIDs []int,
-	Fields []string,
-	Locales []Locale,
-) error {
-	const op = "translator.DeleteTranslations"
-
-	err := t.translationRepository.MassDelete(
-		ctx,
-		Entity,
-		EntityIDs,
-		Fields,
-		Locales,
-	)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	return nil
-}
-
-type TranslateField map[Locale]string
-
-func (tf TranslateField) Get(locale Locale) string {
-	return tf[locale]
-}
-
-func (tf TranslateField) IsEmpty() bool {
-	return len(tf) == 0
+func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error {
+	return t.translationRepository.MassDelete(ctx, entity, entityIDs, fields, []Locale{locale})
 }
 
 // ------------------------------------------------
 // --------------- Helpers ------------------------
 // ------------------------------------------------
 
-func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
+func (t *translator[T]) applyTranslations(entity *T, locale Locale, translations []Translation) error {
 	v := reflect.ValueOf(entity).Elem()
 	typ := v.Type()
 	entityName := toSnakeCase(typ.Name())
-
-	// Get translatable field map via Translatable interface
 	translatable, ok := any(entity).(Translatable)
 	if !ok {
-		return nil // No translatable fields
+		return nil
 	}
-	fieldMap := translatable.TranslatableFieldMap() // struct field name -> translation field id
-
-	// Build reverse map: translation field id -> struct field index
+	fieldMap := translatable.TranslatableFieldMap()
 	idToIndex := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
 		name := typ.Field(i).Name
@@ -170,45 +95,35 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 			idToIndex[fieldID] = i
 		}
 	}
-
-	// Filter translations for current entity only
 	id := translatable.TranslationEntityID()
-	translations = filter(translations, func(tr Translation) bool {
-		return tr.Entity == entityName && tr.EntityID == id
-	})
-
 	for _, tr := range translations {
+		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != locale {
+			continue
+		}
 		idx, ok := idToIndex[tr.Field]
 		if !ok {
 			continue
 		}
 		f := v.Field(idx)
-		if f.Kind() == reflect.Map && f.Type().AssignableTo(reflect.TypeOf(TranslateField{})) {
-			if f.IsNil() {
-				f.Set(reflect.MakeMap(f.Type()))
-			}
-			f.SetMapIndex(reflect.ValueOf(tr.Locale), reflect.ValueOf(tr.Value))
+		if f.Kind() == reflect.String && f.CanSet() {
+			f.SetString(tr.Value)
 		}
 	}
 	return nil
 }
 
-func extractTranslations(entityName string, entityID int, entity any) ([]Translation, error) {
+func extractTranslations(entityName string, entityID int, entity any, locale Locale) ([]Translation, error) {
 	var results []Translation
-
 	v := reflect.ValueOf(entity)
 	if v.Kind() != reflect.Struct {
 		return nil, nil
 	}
 	t := v.Type()
-
-	// Get translatable field map via Translatable interface
 	translatable, ok := entity.(Translatable)
 	if !ok {
 		return nil, nil
 	}
-	fieldMap := translatable.TranslatableFieldMap() // struct field name -> translation field id
-
+	fieldMap := translatable.TranslatableFieldMap()
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		name := field.Name
@@ -216,32 +131,18 @@ func extractTranslations(entityName string, entityID int, entity any) ([]Transla
 		if !ok {
 			continue
 		}
-		fieldValue := v.Field(i).Interface()
-		tf, ok := fieldValue.(TranslateField)
-		if !ok {
-			continue
-		}
-		for locale, value := range tf {
+		f := v.Field(i)
+		if f.Kind() == reflect.String {
 			results = append(results, Translation{
 				Entity:   entityName,
 				EntityID: entityID,
 				Field:    fieldID,
 				Locale:   locale,
-				Value:    value,
+				Value:    f.String(),
 			})
 		}
 	}
 	return results, nil
-}
-
-func filter[T any](in []T, pred func(T) bool) []T {
-	var out []T
-	for _, v := range in {
-		if pred(v) {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 func extractIDs[T Translatable](entities []T) []int {
