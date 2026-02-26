@@ -6,12 +6,12 @@ import (
 	"reflect"
 )
 
-// Translatable Interface for explicit specification of translatable fields
-// TranslatableFields returns a list of field names to be translated
-// Example: []string{"Title", "Description", "Recommendation"}
+// Translatable interface for explicit association between struct fields and translation field IDs
+// TranslatableFieldMap returns a map: key = struct field name, value = translation field ID in DB
+// Example: map[string]string{"Title": "title", "Description": "desc", "Recommendation": "rec"}
 type Translatable interface {
 	TranslationEntityID() int
-	TranslatableFields() []string
+	TranslatableFieldMap() map[string]string
 }
 
 type Translator[T Translatable] interface {
@@ -155,20 +155,19 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	typ := v.Type()
 	entityName := toSnakeCase(typ.Name())
 
-	// Get translatable fields via Translatable interface
+	// Get translatable field map via Translatable interface
 	translatable, ok := any(entity).(Translatable)
 	if !ok {
 		return nil // No translatable fields
 	}
-	fields := translatable.TranslatableFields()
+	fieldMap := translatable.TranslatableFieldMap() // struct field name -> translation field id
 
-	fieldMap := make(map[string]int)
+	// Build reverse map: translation field id -> struct field index
+	idToIndex := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
 		name := typ.Field(i).Name
-		for _, f := range fields {
-			if name == f {
-				fieldMap[toSnakeCase(name)] = i
-			}
+		if fieldID, ok := fieldMap[name]; ok {
+			idToIndex[fieldID] = i
 		}
 	}
 
@@ -179,7 +178,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	})
 
 	for _, tr := range translations {
-		idx, ok := fieldMap[tr.Field]
+		idx, ok := idToIndex[tr.Field]
 		if !ok {
 			continue
 		}
@@ -203,27 +202,20 @@ func extractTranslations(entityName string, entityID int, entity any) ([]Transla
 	}
 	t := v.Type()
 
-	// Get translatable fields via Translatable interface
+	// Get translatable field map via Translatable interface
 	translatable, ok := entity.(Translatable)
 	if !ok {
 		return nil, nil
 	}
-	fields := translatable.TranslatableFields()
+	fieldMap := translatable.TranslatableFieldMap() // struct field name -> translation field id
 
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		name := field.Name
-		isTranslatable := false
-		for _, f := range fields {
-			if name == f {
-				isTranslatable = true
-				break
-			}
-		}
-		if !isTranslatable {
+		fieldID, ok := fieldMap[name]
+		if !ok {
 			continue
 		}
-		fieldName := toSnakeCase(name)
 		fieldValue := v.Field(i).Interface()
 		tf, ok := fieldValue.(TranslateField)
 		if !ok {
@@ -233,7 +225,7 @@ func extractTranslations(entityName string, entityID int, entity any) ([]Transla
 			results = append(results, Translation{
 				Entity:   entityName,
 				EntityID: entityID,
-				Field:    fieldName,
+				Field:    fieldID,
 				Locale:   locale,
 				Value:    value,
 			})
