@@ -41,7 +41,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, locale Locale, ent
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityType = toSnakeCase(entityType)
 	entityIDs := extractIDs(entities)
-	translations, err := t.translationRepository.GetTranslations(ctx, []Locale{locale}, entityType, entityIDs)
+	translations, err := t.translationRepository.GetTranslations(ctx, locale, entityType, entityIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -68,11 +68,11 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, locale Locale, ent
 	if len(allTranslations) == 0 {
 		return nil
 	}
-	return t.translationRepository.MassCreateOrUpdate(ctx, allTranslations)
+	return t.translationRepository.MassCreateOrUpdate(ctx, locale, allTranslations)
 }
 
 func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error {
-	return t.translationRepository.MassDelete(ctx, entity, entityIDs, fields, []Locale{locale})
+	return t.translationRepository.MassDelete(ctx, locale, entity, entityIDs, fields)
 }
 
 // ------------------------------------------------

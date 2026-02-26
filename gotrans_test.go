@@ -106,7 +106,7 @@ func TestDeleteTranslations(t *testing.T) {
 	entity := "parameter"
 	entityIDs := []int{1}
 	fields := []string{"name", "description"}
-	err = repo.MassDelete(ctx, entity, entityIDs, fields, locales)
+	err = repo.MassDelete(ctx, locales, entity, entityIDs, fields)
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 0)
 }
@@ -137,10 +137,10 @@ func (m *mockRepo) MassCreate(
 
 func (m *mockRepo) MassDelete(
 	_ context.Context,
+	locales []Locale,
 	entity string,
 	entityIDs []int,
 	fields []string,
-	locales []Locale,
 ) error {
 	// Delete translations by key
 	type key struct {
@@ -170,6 +170,7 @@ func (m *mockRepo) MassDelete(
 
 func (m *mockRepo) MassCreateOrUpdate(
 	ctx context.Context,
+	locale Locale,
 	translations []Translation,
 ) error {
 	// Group by entity, entityID, field, locale
@@ -212,7 +213,7 @@ func (m *mockRepo) MassCreateOrUpdate(
 		for locale := range localeSet {
 			locales = append(locales, locale)
 		}
-		_ = m.MassDelete(ctx, entity, entityIDs, fields, locales)
+		_ = m.MassDelete(ctx, locales, entity, entityIDs, fields)
 	}
 	return m.MassCreate(ctx, translations)
 }
