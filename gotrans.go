@@ -6,11 +6,15 @@ import (
 	"reflect"
 )
 
-type TranslatableEntity interface {
+// Translatable Interface for explicit specification of translatable fields
+// TranslatableFields returns a list of field names to be translated
+// Example: []string{"Title", "Description", "Recommendation"}
+type Translatable interface {
 	TranslationEntityID() int
+	TranslatableFields() []string
 }
 
-type Translator[T TranslatableEntity] interface {
+type Translator[T Translatable] interface {
 	LoadTranslations(ctx context.Context, locales []Locale, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, entities []T) error
 	DeleteTranslations(
@@ -23,14 +27,14 @@ type Translator[T TranslatableEntity] interface {
 	SupportedLocales() []Locale
 }
 
-var _ Translator[TranslatableEntity] = (*translator[TranslatableEntity])(nil)
+var _ Translator[Translatable] = (*translator[Translatable])(nil)
 
-type translator[T TranslatableEntity] struct {
+type translator[T Translatable] struct {
 	locales               []Locale
 	translationRepository TranslationRepository
 }
 
-func NewTranslator[T TranslatableEntity](
+func NewTranslator[T Translatable](
 	locales []Locale,
 	translationRepository TranslationRepository,
 ) Translator[T] {
@@ -151,15 +155,28 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	typ := v.Type()
 	entityName := toSnakeCase(typ.Name())
 
-	translations = filter(translations, func(tr Translation) bool {
-		id := v.FieldByName("ID").Int()
-		return tr.Entity == entityName && tr.EntityID == int(id)
-	})
+	// Get translatable fields via Translatable interface
+	translatable, ok := any(entity).(Translatable)
+	if !ok {
+		return nil // No translatable fields
+	}
+	fields := translatable.TranslatableFields()
 
 	fieldMap := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
-		fieldMap[toSnakeCase(typ.Field(i).Name)] = i
+		name := typ.Field(i).Name
+		for _, f := range fields {
+			if name == f {
+				fieldMap[toSnakeCase(name)] = i
+			}
+		}
 	}
+
+	// Filter translations for current entity only
+	id := translatable.TranslationEntityID()
+	translations = filter(translations, func(tr Translation) bool {
+		return tr.Entity == entityName && tr.EntityID == id
+	})
 
 	for _, tr := range translations {
 		idx, ok := fieldMap[tr.Field]
@@ -186,12 +203,27 @@ func extractTranslations(entityName string, entityID int, entity any) ([]Transla
 	}
 	t := v.Type()
 
+	// Get translatable fields via Translatable interface
+	translatable, ok := entity.(Translatable)
+	if !ok {
+		return nil, nil
+	}
+	fields := translatable.TranslatableFields()
+
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
-		if field.Tag.Get("translatable") != "true" {
+		name := field.Name
+		isTranslatable := false
+		for _, f := range fields {
+			if name == f {
+				isTranslatable = true
+				break
+			}
+		}
+		if !isTranslatable {
 			continue
 		}
-		fieldName := toSnakeCase(field.Name)
+		fieldName := toSnakeCase(name)
 		fieldValue := v.Field(i).Interface()
 		tf, ok := fieldValue.(TranslateField)
 		if !ok {
@@ -220,7 +252,7 @@ func filter[T any](in []T, pred func(T) bool) []T {
 	return out
 }
 
-func extractIDs[T TranslatableEntity](entities []T) []int {
+func extractIDs[T Translatable](entities []T) []int {
 	ids := make([]int, 0, len(entities))
 	for _, e := range entities {
 		ids = append(ids, e.TranslationEntityID())
