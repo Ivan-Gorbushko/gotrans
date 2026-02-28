@@ -11,8 +11,6 @@ import (
 type Translatable interface {
 	TranslationEntityID() int
 	TranslatableFieldMap() map[string]string
-	SetTranslationEntityID(id int)
-	SetTranslatableFieldMap(fieldMap map[string]string)
 }
 
 // Translator interface for single-locale translation operations

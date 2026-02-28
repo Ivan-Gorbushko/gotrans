@@ -16,6 +16,8 @@ type Product struct {
 	ID          int
 	Title       string
 	Description string
+
+	metaTransFields map[string]string
 }
 
 func (p Product) TranslationEntityID() int { return p.ID }
