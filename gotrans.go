@@ -22,12 +22,17 @@ type Translator[T Translatable] interface {
 	LoadTranslations(ctx context.Context, locale Locale, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, locale Locale, entities []T) error
 	DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error
+	DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error
 }
 
 var _ Translator[Translatable] = (*translator[Translatable])(nil)
 
 type translator[T Translatable] struct {
 	translationRepository TranslationRepository
+}
+
+func (t *translator[T]) DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error {
+	return t.translationRepository.MassDelete(ctx, LocaleNone, entity, entityIDs, nil)
 }
 
 func NewTranslator[T Translatable](translationRepository TranslationRepository) Translator[T] {

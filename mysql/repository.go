@@ -95,9 +95,13 @@ func (t *translationRepository) MassDelete(
 ) error {
 	const op = "translationRepository.MassDelete"
 
-	query := "DELETE FROM translations WHERE entity = ? AND locale = ?"
-	args := []any{entity, locale.String()}
+	query := "DELETE FROM translations WHERE entity = ?"
+	args := []any{entity}
 
+	if locale != gotrans.LocaleNone {
+		query += " AND locale = ?"
+		args = append(args, locale.String())
+	}
 	if len(entityIDs) > 0 {
 		query += " AND entity_id IN (?)"
 		args = append(args, entityIDs)
