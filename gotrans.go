@@ -9,16 +9,17 @@ import (
 // TranslatableFieldMap returns a map: key = struct field name, value = translation field ID in DB
 // Example: map[string]string{"Title": "title", "Description": "desc", "Recommendation": "rec"}
 type Translatable interface {
+	TranslationLocale() Locale
 	TranslationEntityID() int
 	TranslatableFieldMap() map[string]string
 }
 
 // Translator interface for single-locale translation operations
-// All translation operations now work with a single locale and string fields
-// Example usage: LoadTranslations(ctx, locale, entities)
+// All translation operations now work with locale from entity (via TranslationLocale() method)
+// Example usage: LoadTranslations(ctx, entities)
 type Translator[T Translatable] interface {
-	LoadTranslations(ctx context.Context, locale Locale, entities []T) ([]T, error)
-	SaveTranslations(ctx context.Context, locale Locale, entities []T) error
+	LoadTranslations(ctx context.Context, entities []T) ([]T, error)
+	SaveTranslations(ctx context.Context, entities []T) error
 	DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error
 	DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error
 }
@@ -29,51 +30,82 @@ type translator[T Translatable] struct {
 	translationRepository TranslationRepository
 }
 
-func (t *translator[T]) DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error {
-	return t.translationRepository.MassDelete(ctx, LocaleNone, entity, entityIDs, nil)
-}
-
 func NewTranslator[T Translatable](translationRepository TranslationRepository) Translator[T] {
 	return &translator[T]{
 		translationRepository: translationRepository,
 	}
 }
 
-func (t *translator[T]) LoadTranslations(ctx context.Context, locale Locale, entities []T) ([]T, error) {
+func (t *translator[T]) DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error {
+	return t.translationRepository.MassDelete(ctx, LocaleNone, entity, entityIDs, nil)
+}
+
+func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T, error) {
 	if len(entities) == 0 {
 		return nil, nil
 	}
+	
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityType = toSnakeCase(entityType)
-	entityIDs := extractIDs(entities)
-	translations, err := t.translationRepository.GetTranslations(ctx, locale, entityType, entityIDs)
-	if err != nil {
-		return nil, err
+	
+	// Group entities by locale for optimized loading
+	localeMap := make(map[Locale][]int)
+	for _, e := range entities {
+		locale := e.TranslationLocale()
+		localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
 	}
+	
+	// Load translations for each locale group
+	var allTranslations []Translation
+	for locale, entityIDs := range localeMap {
+		translations, err := t.translationRepository.GetTranslations(ctx, locale, entityType, entityIDs)
+		if err != nil {
+			return nil, err
+		}
+		allTranslations = append(allTranslations, translations...)
+	}
+	
+	// Apply translations to entities
 	for i := range entities {
-		err = t.applyTranslations(&entities[i], locale, translations)
+		err := t.applyTranslations(&entities[i], allTranslations)
 		if err != nil {
 			return nil, err
 		}
 	}
+	
 	return entities, nil
 }
 
-func (t *translator[T]) SaveTranslations(ctx context.Context, locale Locale, entities []T) error {
+func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) error {
+	if len(entities) == 0 {
+		return nil
+	}
+	
 	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
 	entityName := toSnakeCase(entityType)
-	var allTranslations []Translation
+	
+	// Group translations by locale for batch save
+	localeMap := make(map[Locale][]Translation)
 	for _, e := range entities {
-		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, locale)
+		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, e.TranslationLocale())
 		if err != nil {
 			return err
 		}
-		allTranslations = append(allTranslations, translations...)
+		locale := e.TranslationLocale()
+		localeMap[locale] = append(localeMap[locale], translations...)
 	}
-	if len(allTranslations) == 0 {
-		return nil
+	
+	// Save grouped translations for each locale
+	for locale, translations := range localeMap {
+		if len(translations) == 0 {
+			continue
+		}
+		if err := t.translationRepository.MassCreateOrUpdate(ctx, locale, translations); err != nil {
+			return err
+		}
 	}
-	return t.translationRepository.MassCreateOrUpdate(ctx, locale, allTranslations)
+	
+	return nil
 }
 
 func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error {
@@ -84,7 +116,7 @@ func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, e
 // --------------- Helpers ------------------------
 // ------------------------------------------------
 
-func (t *translator[T]) applyTranslations(entity *T, locale Locale, translations []Translation) error {
+func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
 	v := reflect.ValueOf(entity).Elem()
 	typ := v.Type()
 	entityName := toSnakeCase(typ.Name())
@@ -102,7 +134,7 @@ func (t *translator[T]) applyTranslations(entity *T, locale Locale, translations
 	}
 	id := translatable.TranslationEntityID()
 	for _, tr := range translations {
-		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != locale {
+		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != translatable.TranslationLocale() {
 			continue
 		}
 		idx, ok := idToIndex[tr.Field]
@@ -150,13 +182,6 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 	return results, nil
 }
 
-func extractIDs[T Translatable](entities []T) []int {
-	ids := make([]int, 0, len(entities))
-	for _, e := range entities {
-		ids = append(ids, e.TranslationEntityID())
-	}
-	return ids
-}
 
 /**
  * Converts a string from CamelCase to snake_case with next rules:

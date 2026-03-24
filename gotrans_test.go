@@ -9,13 +9,15 @@ import (
 
 type Parameter struct {
 	ID          int
+	Locale      Locale
 	Name        string
 	Description string
 }
 
 var _ Translatable = (*Parameter)(nil)
 
-func (p Parameter) TranslationEntityID() int { return p.ID }
+func (p Parameter) TranslationLocale() Locale   { return p.Locale }
+func (p Parameter) TranslationEntityID() int    { return p.ID }
 func (p Parameter) TranslatableFieldMap() map[string]string {
 	return map[string]string{
 		"Name":        "name",
@@ -32,9 +34,9 @@ func TestLoadTranslations(t *testing.T) {
 	}
 	paramTrans := NewTranslator[Parameter](repo)
 
-	parms := []Parameter{{ID: 1}}
+	parms := []Parameter{{ID: 1, Locale: LocaleEN}}
 	ctx := context.Background()
-	parms, err := paramTrans.LoadTranslations(ctx, LocaleEN, parms)
+	parms, err := paramTrans.LoadTranslations(ctx, parms)
 	require.NoError(t, err)
 
 	require.Equal(t, "Example Name EN", parms[0].Name)
@@ -47,11 +49,12 @@ func TestSaveTranslations(t *testing.T) {
 
 	parms := []Parameter{{
 		ID:          1,
+		Locale:      LocaleEN,
 		Name:        "New Name EN",
 		Description: "Desc EN",
 	}}
 	ctx := context.Background()
-	err := paramTrans.SaveTranslations(ctx, LocaleEN, parms)
+	err := paramTrans.SaveTranslations(ctx, parms)
 	require.NoError(t, err)
 
 	require.Len(t, repo.saved, 2)
@@ -78,11 +81,12 @@ func TestDeleteTranslations(t *testing.T) {
 	// Saving translations
 	parms := []Parameter{{
 		ID:          1,
+		Locale:      LocaleEN,
 		Name:        "Name EN",
 		Description: "Desc EN",
 	}}
 	ctx := context.Background()
-	_ = paramTrans.SaveTranslations(ctx, LocaleEN, parms)
+	_ = paramTrans.SaveTranslations(ctx, parms)
 	require.Len(t, repo.saved, 2)
 
 	// Delete translations
@@ -92,6 +96,34 @@ func TestDeleteTranslations(t *testing.T) {
 	err := repo.MassDelete(ctx, LocaleEN, entity, entityIDs, fields)
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 0)
+}
+
+// TestMultiLocaleSaveAndLoad demonstrates that translations are grouped by locale
+// This test verifies that the translator efficiently handles multiple locales
+func TestMultiLocaleSaveAndLoad(t *testing.T) {
+	repo := &mockRepo{
+		translations: []Translation{
+			{Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Name EN"},
+			{Entity: "parameter", EntityID: 2, Field: "name", Locale: LocaleFR, Value: "Name FR"},
+			{Entity: "parameter", EntityID: 1, Field: "description", Locale: LocaleEN, Value: "Desc EN"},
+			{Entity: "parameter", EntityID: 2, Field: "description", Locale: LocaleFR, Value: "Desc FR"},
+		},
+	}
+	paramTrans := NewTranslator[Parameter](repo)
+
+	// Load with mixed locales
+	parms := []Parameter{
+		{ID: 1, Locale: LocaleEN},
+		{ID: 2, Locale: LocaleFR},
+	}
+	ctx := context.Background()
+	parms, err := paramTrans.LoadTranslations(ctx, parms)
+	require.NoError(t, err)
+
+	require.Equal(t, "Name EN", parms[0].Name)
+	require.Equal(t, "Desc EN", parms[0].Description)
+	require.Equal(t, "Name FR", parms[1].Name)
+	require.Equal(t, "Desc FR", parms[1].Description)
 }
 
 type mockRepo struct {

@@ -11,16 +11,17 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Example entity
+// Example entity with built-in locale
 type Product struct {
 	ID          int
+	Locale      gotrans.Locale
 	Title       string
 	Description string
-
-	metaTransFields map[string]string
 }
 
-func (p Product) TranslationEntityID() int { return p.ID }
+// Implement Translatable interface
+func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationEntityID() int          { return p.ID }
 func (p Product) TranslatableFieldMap() map[string]string {
 	return map[string]string{
 		"Title":       "title",
@@ -30,6 +31,7 @@ func (p Product) TranslatableFieldMap() map[string]string {
 
 func main() {
 	ctx := context.Background()
+	
 	// Open in-memory SQLite DB
 	db, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -45,7 +47,8 @@ func main() {
 			entity_id INTEGER,
 			field TEXT,
 			locale TEXT,
-			value TEXT
+			value TEXT,
+			UNIQUE(entity, entity_id, field, locale)
 		)
 	`)
 	if err != nil {
@@ -55,35 +58,89 @@ func main() {
 	repo := mysql.NewTranslationRepository(db)
 	translator := gotrans.NewTranslator[Product](repo)
 
-	// Save translation
-	product := Product{ID: 1, Title: "Apple", Description: "Fresh fruit"}
-	_ = translator.SaveTranslations(ctx, gotrans.LocaleEN, []Product{product})
-
-	fmt.Println("Saved translations:")
-	rows, _ := db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations")
-	for rows.Next() {
-		var entity string
-		var entityID int
-		var field, locale, value string
-		_ = rows.Scan(&entity, &entityID, &field, &locale, &value)
-		fmt.Printf("%s %d %s %s %s\n", entity, entityID, field, locale, value)
+	// Example 1: Save translations for English
+	fmt.Println("=== Example 1: Save English Translations ===")
+	products := []Product{
+		{ID: 1, Locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh fruit"},
+		{ID: 2, Locale: gotrans.LocaleEN, Title: "Banana", Description: "Yellow fruit"},
+	}
+	err = translator.SaveTranslations(ctx, products)
+	if err != nil {
+		log.Fatalf("failed to save: %v", err)
 	}
 
-	// Load translation
-	product.Title = ""
-	product.Description = ""
-	products, _ := translator.LoadTranslations(ctx, gotrans.LocaleEN, []Product{product})
-	fmt.Printf("Loaded: Title=%s, Description=%s\n", products[0].Title, products[0].Description)
+	// Example 2: Save translations for French (demonstrates grouping by locale)
+	fmt.Println("\n=== Example 2: Save French Translations ===")
+	productsFR := []Product{
+		{ID: 1, Locale: gotrans.LocaleFR, Title: "Pomme", Description: "Fruit frais"},
+		{ID: 2, Locale: gotrans.LocaleFR, Title: "Banane", Description: "Fruit jaune"},
+	}
+	err = translator.SaveTranslations(ctx, productsFR)
+	if err != nil {
+		log.Fatalf("failed to save: %v", err)
+	}
 
-	// Delete translation
-	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, "product", []int{1}, []string{"title", "description"})
-	fmt.Println("After delete:")
-	rows, _ = db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations")
+	fmt.Println("\nSaved translations:")
+	rows, _ := db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations ORDER BY locale, entity_id, field")
 	for rows.Next() {
 		var entity string
 		var entityID int
 		var field, locale, value string
 		_ = rows.Scan(&entity, &entityID, &field, &locale, &value)
-		fmt.Printf("%s %d %s %s %s\n", entity, entityID, field, locale, value)
+		fmt.Printf("  %s[%d].%s[%s] = %s\n", entity, entityID, field, locale, value)
+	}
+
+	// Example 3: Load translations for English
+	fmt.Println("\n=== Example 3: Load English Translations ===")
+	productsToLoad := []Product{
+		{ID: 1, Locale: gotrans.LocaleEN},
+		{ID: 2, Locale: gotrans.LocaleEN},
+	}
+	productsLoaded, _ := translator.LoadTranslations(ctx, productsToLoad)
+	for _, p := range productsLoaded {
+		fmt.Printf("Product %d (EN): %s - %s\n", p.ID, p.Title, p.Description)
+	}
+
+	// Example 4: Load translations for French
+	fmt.Println("\n=== Example 4: Load French Translations ===")
+	productsToLoadFR := []Product{
+		{ID: 1, Locale: gotrans.LocaleFR},
+		{ID: 2, Locale: gotrans.LocaleFR},
+	}
+	productsLoadedFR, _ := translator.LoadTranslations(ctx, productsToLoadFR)
+	for _, p := range productsLoadedFR {
+		fmt.Printf("Product %d (FR): %s - %s\n", p.ID, p.Title, p.Description)
+	}
+
+	// Example 5: Delete translations for specific locale
+	fmt.Println("\n=== Example 5: Delete English Translations ===")
+	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, "product", []int{1}, []string{"title", "description"})
+	
+	fmt.Println("Remaining translations:")
+	rows, _ = db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations ORDER BY locale, entity_id")
+	count := 0
+	for rows.Next() {
+		var entity string
+		var entityID int
+		var field, locale, value string
+		_ = rows.Scan(&entity, &entityID, &field, &locale, &value)
+		fmt.Printf("  %s[%d].%s[%s] = %s\n", entity, entityID, field, locale, value)
+		count++
+	}
+	if count == 0 {
+		fmt.Println("  (no translations)")
+	}
+
+	// Example 6: Delete all translations for entity
+	fmt.Println("\n=== Example 6: Delete All Translations for Entities ===")
+	_ = translator.DeleteTranslationsByEntity(ctx, "product", []int{1, 2})
+	
+	fmt.Println("After delete all:")
+	rows, _ = db.Queryx("SELECT COUNT(*) FROM translations")
+	var count64 int64
+	for rows.Next() {
+		_ = rows.Scan(&count64)
+		fmt.Printf("  Total translations: %d\n", count64)
 	}
 }
+
