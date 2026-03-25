@@ -1,29 +1,22 @@
 package gotrans
 
-// Translation represents a translated field value for a specific entity and locale
+// Translation represents a translated field value for a specific entity and locale.
+// ID is typically auto-incremented by the database and may be omitted for insert operations.
+// Entity is the type name (e.g., "product"), EntityID identifies the specific entity instance.
+// Field maps to the translatable field name (e.g., "title", "description").
+// Locale specifies the language variant.
+// Value contains the translated text.
 type Translation struct {
-	ID       int
-	Entity   string
+	// ID is the database primary key (omitted for inserts).
+	ID int
+	// Entity is the entity type name (e.g., "product", "parameter").
+	Entity string
+	// EntityID is the unique identifier of the entity instance.
 	EntityID int
-	Field    string
-	locale   Locale
-	Value    string
+	// Field is the database field identifier (e.g., "title", "description").
+	Field string
+	// Locale is the language variant for this translation.
+	Locale Locale
+	// Value contains the translated text.
+	Value string
 }
-
-// GetLocale returns the locale of the translation
-func (t Translation) GetLocale() Locale {
-	return t.locale
-}
-
-// NewTranslation creates a new Translation instance with the given parameters
-func NewTranslation(id int, entity string, entityID int, field string, locale Locale, value string) Translation {
-	return Translation{
-		ID:       id,
-		Entity:   entity,
-		EntityID: entityID,
-		Field:    field,
-		locale:   locale,
-		Value:    value,
-	}
-}
-

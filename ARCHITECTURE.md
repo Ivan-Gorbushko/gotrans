@@ -584,14 +584,55 @@ Access via constants: `gotrans.LocaleEN`, `gotrans.LocaleFR`, etc.
 
 Convert from strings: `gotrans.ParseLocale("en")`
 
+## Advanced Features
+
+### Cache Statistics
+
+The library tracks cache performance metrics automatically:
+
+```go
+type CacheStats struct {
+    Hits        int64         // Successful lookups
+    Misses      int64         // Cache misses
+    Sets        int64         // Items cached
+    Deletes     int64         // Items removed
+    LastCleared time.Time     // Last cache clear
+}
+
+stats := cache.Stats()
+```
+
+### Context Timeout Support
+
+Operations can have automatic timeouts to prevent indefinite hangs:
+
+```go
+translator := gotrans.NewTranslatorWithOptions(gotrans.TranslatorOptions[Product]{
+    Repository:            repo,
+    DefaultContextTimeout: 30 * time.Second,
+})
+```
+
+### Batch Processing
+
+Large queries are automatically split into batches for efficiency:
+
+```go
+cachedRepo := gotrans.NewCachedRepository(repo, cache, gotrans.CacheOptions{
+    TTL:       5 * time.Minute,
+    BatchSize: 500,  // Process 500 IDs per query
+})
+```
+
 ## Summary
 
 The architecture of `gotrans` is built on these principles:
 
 1. **Simplicity**: Minimal API surface, easy to understand
 2. **Safety**: Type-safe with generics, compile-time checking
-3. **Performance**: Automatic optimization for batch operations
+3. **Performance**: Automatic optimization for batch operations and caching
 4. **Flexibility**: Explicit field mapping and entity naming
-5. **Practicality**: Works with any sqlx-compatible database
-6. **Maintainability**: Clear code, well-documented, tested
-
+5. **Reliability**: Context timeouts prevent operation hangs
+6. **Visibility**: Cache statistics for production monitoring
+7. **Practicality**: Works with any sqlx-compatible database
+8. **Maintainability**: Clear code, well-documented, tested

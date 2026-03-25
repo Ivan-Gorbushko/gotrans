@@ -2,10 +2,19 @@ package gotrans
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"sync"
 	"time"
 )
+
+// CacheStats provides statistics about cache performance.
+type CacheStats struct {
+	Hits        int64
+	Misses      int64
+	Sets        int64
+	Deletes     int64
+	LastCleared time.Time
+}
 
 // TranslationCache is the interface for pluggable cache backends.
 // Implementations can be in-memory, Redis, Memcached, or any custom store.
@@ -21,6 +30,12 @@ type TranslationCache interface {
 
 	// Clear removes all entries from the cache.
 	Clear()
+
+	// Stats returns cache statistics (hits, misses, etc).
+	Stats() CacheStats
+
+	// ResetStats resets cache statistics to zero.
+	ResetStats()
 }
 
 // CacheOptions configures the caching behaviour of a cached repository.
@@ -28,6 +43,14 @@ type CacheOptions struct {
 	// TTL defines how long a cached entry remains valid.
 	// Zero means entries never expire.
 	TTL time.Duration
+
+	// BatchSize defines the maximum number of IDs to fetch in a single query.
+	// Default is 1000 if not set or set to 0.
+	BatchSize int
+
+	// DefaultContextTimeout specifies default timeout for cache operations.
+	// Zero means no timeout.
+	DefaultContextTimeout time.Duration
 }
 
 // -----------------------------------------------------------------------------
@@ -46,8 +69,10 @@ func (e cacheEntry) isExpired() bool {
 // InMemoryCache is a thread-safe in-memory implementation of TranslationCache.
 // It is the default backend used by NewCachedRepositoryInMemory.
 type InMemoryCache struct {
-	mu    sync.RWMutex
-	items map[string]cacheEntry
+	mu      sync.RWMutex
+	items   map[string]cacheEntry
+	stats   CacheStats
+	statsMu sync.RWMutex
 }
 
 // NewInMemoryCache returns a ready-to-use in-memory cache.
@@ -59,9 +84,27 @@ func (c *InMemoryCache) Get(key string) ([]Translation, bool) {
 	c.mu.RLock()
 	entry, ok := c.items[key]
 	c.mu.RUnlock()
-	if !ok || entry.isExpired() {
+
+	if !ok {
+		c.statsMu.Lock()
+		c.stats.Misses++
+		c.statsMu.Unlock()
 		return nil, false
 	}
+
+	if entry.isExpired() {
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+		c.statsMu.Lock()
+		c.stats.Misses++
+		c.statsMu.Unlock()
+		return nil, false
+	}
+
+	c.statsMu.Lock()
+	c.stats.Hits++
+	c.statsMu.Unlock()
 	return entry.value, true
 }
 
@@ -73,6 +116,9 @@ func (c *InMemoryCache) Set(key string, value []Translation, ttl time.Duration) 
 	c.mu.Lock()
 	c.items[key] = entry
 	c.mu.Unlock()
+	c.statsMu.Lock()
+	c.stats.Sets++
+	c.statsMu.Unlock()
 }
 
 func (c *InMemoryCache) Delete(keys ...string) {
@@ -81,12 +127,32 @@ func (c *InMemoryCache) Delete(keys ...string) {
 		delete(c.items, k)
 	}
 	c.mu.Unlock()
+	c.statsMu.Lock()
+	c.stats.Deletes += int64(len(keys))
+	c.statsMu.Unlock()
 }
 
 func (c *InMemoryCache) Clear() {
 	c.mu.Lock()
 	c.items = make(map[string]cacheEntry)
 	c.mu.Unlock()
+	c.statsMu.Lock()
+	c.stats.LastCleared = time.Now()
+	c.statsMu.Unlock()
+}
+
+// Stats returns cache statistics.
+func (c *InMemoryCache) Stats() CacheStats {
+	c.statsMu.RLock()
+	defer c.statsMu.RUnlock()
+	return c.stats
+}
+
+// ResetStats resets cache statistics to zero.
+func (c *InMemoryCache) ResetStats() {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	c.stats = CacheStats{}
 }
 
 // -----------------------------------------------------------------------------
@@ -134,13 +200,18 @@ func NewCachedRepositoryInMemory(repo TranslationRepository, opts CacheOptions) 
 }
 
 // GetTranslations checks the cache per entity ID and fetches only the missing
-// IDs from the underlying repository (cache-aside pattern).
+// IDs from the underlying repository (cache-aside pattern). Uses batch processing
+// with configurable batch size (default 1000).
 func (c *cachedRepository) GetTranslations(
 	ctx context.Context,
 	locale Locale,
 	entity string,
 	entityIDs []int,
 ) ([]Translation, error) {
+	if len(entityIDs) == 0 {
+		return nil, nil
+	}
+
 	var result []Translation
 	var missedIDs []int
 
@@ -157,9 +228,26 @@ func (c *cachedRepository) GetTranslations(
 		return result, nil
 	}
 
-	fetched, err := c.repo.GetTranslations(ctx, locale, entity, missedIDs)
-	if err != nil {
-		return nil, err
+	// Determine batch size
+	batchSize := c.opts.BatchSize
+	if batchSize <= 0 {
+		batchSize = 1000 // default batch size
+	}
+
+	var fetched []Translation
+
+	// Process in batches
+	for start := 0; start < len(missedIDs); start += batchSize {
+		end := start + batchSize
+		if end > len(missedIDs) {
+			end = len(missedIDs)
+		}
+
+		batch, err := c.repo.GetTranslations(ctx, locale, entity, missedIDs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		fetched = append(fetched, batch...)
 	}
 
 	// Group by entityID so we can cache each entity separately.
@@ -168,7 +256,8 @@ func (c *cachedRepository) GetTranslations(
 		byID[tr.EntityID] = append(byID[tr.EntityID], tr)
 	}
 
-	// Store in cache — even empty results to avoid repeated DB hits.
+	// Store in cache — ОДНА операция под lock!
+	c.idxMu.Lock()
 	for _, id := range missedIDs {
 		key := translationCacheKey(locale, entity, id)
 		translations := byID[id]
@@ -176,18 +265,16 @@ func (c *cachedRepository) GetTranslations(
 			translations = []Translation{}
 		}
 		c.cache.Set(key, translations, c.opts.TTL)
-		c.trackKey(entity, id, key)
+		// Встроена логика trackKey для атомарности
+		eKey := entityIndexKey(entity, id)
+		if c.entityIndex[eKey] == nil {
+			c.entityIndex[eKey] = make(map[string]struct{})
+		}
+		c.entityIndex[eKey][key] = struct{}{}
 	}
+	c.idxMu.Unlock()
 
 	return append(result, fetched...), nil
-}
-
-func (c *cachedRepository) MassCreate(ctx context.Context, translations []Translation) error {
-	if err := c.repo.MassCreate(ctx, translations); err != nil {
-		return err
-	}
-	c.invalidateByTranslations(translations)
-	return nil
 }
 
 func (c *cachedRepository) MassDelete(
@@ -228,25 +315,28 @@ func (c *cachedRepository) MassCreateOrUpdate(
 }
 
 // invalidateByTranslations removes cache entries for the affected translations.
+// The idxMu lock is held for the entire operation (cache.Delete + index update)
+// to prevent a race where another goroutine could re-add a key between the two steps.
 func (c *cachedRepository) invalidateByTranslations(translations []Translation) {
 	seen := make(map[string]struct{}, len(translations))
 	keys := make([]string, 0, len(translations))
 	for _, tr := range translations {
-		k := translationCacheKey(tr.GetLocale(), tr.Entity, tr.EntityID)
+		k := translationCacheKey(tr.Locale, tr.Entity, tr.EntityID)
 		if _, dup := seen[k]; !dup {
 			seen[k] = struct{}{}
 			keys = append(keys, k)
 		}
 	}
-	c.cache.Delete(keys...)
+
 	c.idxMu.Lock()
+	defer c.idxMu.Unlock()
+	c.cache.Delete(keys...)
 	for _, tr := range translations {
 		eKey := entityIndexKey(tr.Entity, tr.EntityID)
 		if keyset, ok := c.entityIndex[eKey]; ok {
-			delete(keyset, translationCacheKey(tr.GetLocale(), tr.Entity, tr.EntityID))
+			delete(keyset, translationCacheKey(tr.Locale, tr.Entity, tr.EntityID))
 		}
 	}
-	c.idxMu.Unlock()
 }
 
 // invalidateAllLocales removes all cached entries for the given entity IDs
@@ -267,17 +357,6 @@ func (c *cachedRepository) invalidateAllLocales(entity string, entityIDs []int) 
 	}
 }
 
-// trackKey records a cache key in the entity index.
-func (c *cachedRepository) trackKey(entity string, entityID int, key string) {
-	c.idxMu.Lock()
-	eKey := entityIndexKey(entity, entityID)
-	if c.entityIndex[eKey] == nil {
-		c.entityIndex[eKey] = make(map[string]struct{})
-	}
-	c.entityIndex[eKey][key] = struct{}{}
-	c.idxMu.Unlock()
-}
-
 // untrackKeys removes keys from the entity index after explicit deletion.
 func (c *cachedRepository) untrackKeys(entity string, entityIDs []int, keys []string) {
 	c.idxMu.Lock()
@@ -291,12 +370,15 @@ func (c *cachedRepository) untrackKeys(entity string, entityIDs []int, keys []st
 }
 
 // translationCacheKey builds the per-entity-locale cache key.
+// Uses string concatenation instead of fmt.Sprintf for better hot-path performance.
 func translationCacheKey(locale Locale, entity string, entityID int) string {
-	return fmt.Sprintf("%s:%s:%d", locale.String(), entity, entityID)
+	if entity == "" {
+		entity = "unknown"
+	}
+	return locale.String() + ":" + entity + ":" + strconv.Itoa(entityID)
 }
 
 // entityIndexKey builds the entity-level index key used for cross-locale invalidation.
 func entityIndexKey(entity string, entityID int) string {
-	return fmt.Sprintf("%s:%d", entity, entityID)
+	return entity + ":" + strconv.Itoa(entityID)
 }
-

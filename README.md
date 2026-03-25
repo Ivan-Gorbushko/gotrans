@@ -12,6 +12,9 @@ Lightweight, framework-agnostic translation module for Go applications. Manage m
 - **Framework Agnostic**: Works with MySQL, SQLite, PostgreSQL, and any database supported by sqlx
 - **41 Supported Languages**: Complete ISO-639-1 locale support
 - **Zero Dependencies**: Only requires sqlx for database operations
+- **Cache Statistics**: Monitor cache performance with real-time hit/miss tracking
+- **Context Timeout Support**: Automatic operation timeouts to prevent hangs
+- **Configurable Batch Processing**: Efficiently handle large datasets with automatic batching
 
 ## Installation
 
@@ -467,6 +470,63 @@ translator := gotrans.NewTranslator[Product](repo)
 // Only Product entities can be used with this translator
 // Compile-time error if you try to use other types
 ```
+
+## Advanced Features
+
+### Cache Statistics
+
+Monitor cache performance in production:
+
+```go
+cache := gotrans.NewInMemoryCache()
+cachedRepo := gotrans.NewCachedRepository(repo, cache, gotrans.CacheOptions{
+    TTL: 5 * time.Minute,
+})
+
+// Perform operations...
+
+stats := cache.Stats()
+hitRate := float64(stats.Hits) / float64(stats.Hits + stats.Misses) * 100
+fmt.Printf("Cache Hit Rate: %.1f%%\n", hitRate)
+```
+
+### Context Timeout Support
+
+Prevent operations from hanging indefinitely:
+
+```go
+translator := gotrans.NewTranslatorWithOptions(gotrans.TranslatorOptions[Product]{
+    Repository: repo,
+    DefaultContextTimeout: 30 * time.Second,
+})
+
+// Operations automatically timeout after 30 seconds if not completed
+products, err := translator.LoadTranslations(context.Background(), items)
+```
+
+### Batch Processing
+
+Efficiently handle large datasets:
+
+```go
+cachedRepo := gotrans.NewCachedRepository(repo, cache, gotrans.CacheOptions{
+    TTL: 5 * time.Minute,
+    BatchSize: 500,  // Process 500 IDs per database query
+})
+
+// Large queries automatically split into batches
+// Loading 5000 items = 10 queries of 500 items each
+```
+
+## Examples
+
+Complete working examples demonstrating all features:
+
+- **[example/basic](example/basic)** - Basic usage and setup
+- **[example/caching](example/caching)** - Cache statistics and monitoring
+- **[example/error-handling](example/error-handling)** - Context timeouts and error handling
+- **[example/performance](example/performance)** - Large dataset optimization
+- **[example/advanced](example/advanced)** - Multi-locale management patterns
 
 ## Related Documentation
 

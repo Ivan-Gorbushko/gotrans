@@ -75,7 +75,7 @@ var languages = map[Locale]langInfo{
 	LocaleEL: {"el", "Greek"},
 	LocaleHE: {"he", "Hebrew"},
 	LocaleHU: {"hu", "Hungarian"},
-	LocaleID: {"id", "Indonesia"},
+	LocaleID: {"id", "Indonesian"},
 	LocaleJA: {"ja", "Japanese"},
 	LocaleKK: {"kk", "Kazakh"},
 	LocaleKO: {"ko", "Korean"},
@@ -107,9 +107,11 @@ var aliases = map[string]Locale{
 	"pt-br":   LocalePT,
 }
 
-// Map lookup table
+// Map lookup table built at init time.
+// Includes "none" so ParseLocale(LocaleNone.String()) round-trips correctly.
 var codeToLocale = func() map[string]Locale {
 	m := make(map[string]Locale)
+	m["none"] = LocaleNone
 	for l, info := range languages {
 		m[info.code] = l
 	}
@@ -156,6 +158,19 @@ func (l Locale) Name() string {
 	return ""
 }
 
+// String returns the ISO-639-1 code, or "none" for LocaleNone.
 func (l Locale) String() string {
+	if l == LocaleNone {
+		return "none"
+	}
 	return l.Code()
+}
+
+// AllLocales returns all supported locales in an unspecified order, excluding LocaleNone.
+func AllLocales() []Locale {
+	result := make([]Locale, 0, len(languages))
+	for l := range languages {
+		result = append(result, l)
+	}
+	return result
 }
