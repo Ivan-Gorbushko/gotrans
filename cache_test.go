@@ -1,10 +1,13 @@
 package gotrans
+
 import (
-"context"
-"testing"
-"time"
-"github.com/stretchr/testify/require"
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
 type countingRepo struct {
 	mockRepo
 	getCalls int

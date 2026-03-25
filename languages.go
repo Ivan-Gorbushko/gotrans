@@ -75,7 +75,7 @@ var languages = map[Locale]langInfo{
 	LocaleEL: {"el", "Greek"},
 	LocaleHE: {"he", "Hebrew"},
 	LocaleHU: {"hu", "Hungarian"},
-	LocaleID: {"id", "Indonesia"},
+	LocaleID: {"id", "Indonesian"},
 	LocaleJA: {"ja", "Japanese"},
 	LocaleKK: {"kk", "Kazakh"},
 	LocaleKO: {"ko", "Korean"},

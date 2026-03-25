@@ -199,6 +199,28 @@ func (m *mockRepo) MassCreateOrUpdate(
 	if len(translations) == 0 {
 		return nil
 	}
-	_ = m.MassDelete(ctx, locale, translations[0].Entity, []int{translations[0].EntityID}, []string{translations[0].Field})
+	
+	// Collect all unique entity IDs and fields to delete
+	type key struct {
+		entity string
+		id     int
+		field  string
+	}
+	toDelete := make(map[key]struct{})
+	for _, tr := range translations {
+		toDelete[key{tr.Entity, tr.EntityID, tr.Field}] = struct{}{}
+	}
+	
+	// Delete matching translations
+	var filtered []Translation
+	for _, tr := range m.saved {
+		k := key{tr.Entity, tr.EntityID, tr.Field}
+		if _, ok := toDelete[k]; !ok {
+			filtered = append(filtered, tr)
+		}
+	}
+	m.saved = filtered
+	
+	// Insert new translations
 	return m.MassCreate(ctx, translations)
 }

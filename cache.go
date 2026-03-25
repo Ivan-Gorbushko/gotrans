@@ -59,9 +59,18 @@ func (c *InMemoryCache) Get(key string) ([]Translation, bool) {
 	c.mu.RLock()
 	entry, ok := c.items[key]
 	c.mu.RUnlock()
-	if !ok || entry.isExpired() {
+	
+	if !ok {
 		return nil, false
 	}
+	
+	if entry.isExpired() {
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+		return nil, false
+	}
+	
 	return entry.value, true
 }
 

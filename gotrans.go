@@ -89,16 +89,10 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 		return nil
 	}
 
-	// Get entity name from first entity
-	entityName := entities[0].TranslationEntityName()
-
 	// Group translations by locale for batch save
 	localeMap := make(map[Locale][]Translation)
 	for _, e := range entities {
-		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, e.TranslationEntityLocale())
-		if err != nil {
-			return err
-		}
+		translations := extractTranslations(e)
 		locale := e.TranslationEntityLocale()
 		localeMap[locale] = append(localeMap[locale], translations...)
 	}
@@ -133,6 +127,8 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	}
 	entityName := translatable.TranslationEntityName()
 	fieldMap := translatable.TranslatableFields()
+	
+	// Build field index once
 	idToIndex := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
 		name := typ.Field(i).Name
@@ -140,9 +136,12 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 			idToIndex[fieldID] = i
 		}
 	}
+	
 	id := translatable.TranslationEntityID()
+	locale := translatable.TranslationEntityLocale()
+	
 	for _, tr := range translations {
-		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != translatable.TranslationEntityLocale() {
+		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != locale {
 			continue
 		}
 		idx, ok := idToIndex[tr.Field]
@@ -157,20 +156,25 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	return nil
 }
 
-func extractTranslations(entityName string, entityID int, entity any, locale Locale) ([]Translation, error) {
+func extractTranslations(entity Translatable) []Translation {
 	var results []Translation
+	
 	v := reflect.ValueOf(entity)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
 	if v.Kind() != reflect.Struct {
-		return nil, nil
+		return results
 	}
-	t := v.Type()
-	translatable, ok := entity.(Translatable)
-	if !ok {
-		return nil, nil
-	}
-	fieldMap := translatable.TranslatableFields()
+	
+	typ := v.Type()
+	entityName := entity.TranslationEntityName()
+	entityID := entity.TranslationEntityID()
+	locale := entity.TranslationEntityLocale()
+	fieldMap := entity.TranslatableFields()
+	
 	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
+		field := typ.Field(i)
 		name := field.Name
 		fieldID, ok := fieldMap[name]
 		if !ok {
@@ -187,15 +191,14 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 			})
 		}
 	}
-	return results, nil
+	return results
 }
 
-/**
- * Converts a string from CamelCase to snake_case with next rules:
- * - AIRecommends → ai_recommends
- * - AICRecommends → aic_recommends
- * - SomeField → some_field
- */
+// toSnakeCase converts a string from CamelCase to snake_case.
+// Rules:
+// - AIRecommends → ai_recommends
+// - AICRecommends → aic_recommends
+// - SomeField → some_field
 func toSnakeCase(str string) string {
 	var result []rune
 	runes := []rune(str)

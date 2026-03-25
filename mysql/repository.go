@@ -24,7 +24,7 @@ func (t *translationRepository) GetTranslations(
 	entity string,
 	entityIDs []int,
 ) ([]gotrans.Translation, error) {
-	const op = "translationRepository.GetByEntityAndField"
+	const op = "translationRepository.GetTranslations"
 	const batchSize = 1000
 
 	var allMysqlTranslations []Translation
@@ -167,10 +167,6 @@ func (t *translationRepository) MassCreateOrUpdate(
 		}
 	}
 
-	mysqlTranslations := make([]Translation, len(translations))
-	for i := range translations {
-		mysqlTranslations[i] = toMysqlTranslateModel(translations[i])
-	}
 
 	if err := t.MassCreate(ctx, translations); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
