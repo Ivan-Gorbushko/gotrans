@@ -107,9 +107,11 @@ var aliases = map[string]Locale{
 	"pt-br":   LocalePT,
 }
 
-// Map lookup table
+// Map lookup table built at init time.
+// Includes "none" so ParseLocale(LocaleNone.String()) round-trips correctly.
 var codeToLocale = func() map[string]Locale {
 	m := make(map[string]Locale)
+	m["none"] = LocaleNone
 	for l, info := range languages {
 		m[info.code] = l
 	}

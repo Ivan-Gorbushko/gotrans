@@ -48,10 +48,16 @@ func NewTranslator[T Translatable](repo TranslationRepository) Translator[T] {
 }
 
 func (t *translator[T]) DeleteTranslationsByEntity(ctx context.Context, entityIDs []int) error {
+	if len(entityIDs) == 0 {
+		return nil
+	}
 	return t.repo.MassDelete(ctx, LocaleNone, t.entityName, entityIDs, nil)
 }
 
 func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, entityIDs []int, fields []string) error {
+	if len(entityIDs) == 0 {
+		return nil
+	}
 	return t.repo.MassDelete(ctx, locale, t.entityName, entityIDs, fields)
 }
 
@@ -60,11 +66,20 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		return entities, nil
 	}
 
-	// Group entity IDs by locale for batch DB fetching.
+	// Group entity IDs by locale, deduplicating to avoid redundant DB queries.
+	type localeID struct {
+		locale Locale
+		id     int
+	}
+	seen := make(map[localeID]struct{}, len(entities))
 	localeMap := make(map[Locale][]int)
 	for _, e := range entities {
-		locale := e.TranslationEntityLocale()
-		localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
+		k := localeID{e.TranslationEntityLocale(), e.TranslationEntityID()}
+		if _, dup := seen[k]; !dup {
+			seen[k] = struct{}{}
+			locale := e.TranslationEntityLocale()
+			localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
+		}
 	}
 
 	// Fetch translations for each locale group.
@@ -141,7 +156,7 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 // ------------------------------------------------
 
 // buildFieldIndex builds a map from DB field ID → struct field index for type T.
-// Called once per LoadTranslations since all entities share the same type.
+// Pre-built once at translator construction — never recalculated per request.
 func buildFieldIndex[T Translatable]() map[string]int {
 	var zero T
 	fieldMap := zero.TranslatableFields()
@@ -149,10 +164,18 @@ func buildFieldIndex[T Translatable]() map[string]int {
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
-	idToIndex := make(map[string]int, len(fieldMap))
+
+	// Build struct field name → index for quick lookup.
+	nameToIdx := make(map[string]int, typ.NumField())
 	for i := 0; i < typ.NumField(); i++ {
-		if fieldID, ok := fieldMap[typ.Field(i).Name]; ok {
-			idToIndex[fieldID] = i
+		nameToIdx[typ.Field(i).Name] = i
+	}
+
+	// Map DB field IDs → struct indices using fieldMap (only translatable fields).
+	idToIndex := make(map[string]int, len(fieldMap))
+	for structName, dbID := range fieldMap {
+		if idx, ok := nameToIdx[structName]; ok {
+			idToIndex[dbID] = idx
 		}
 	}
 	return idToIndex
