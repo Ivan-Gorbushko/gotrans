@@ -6,12 +6,12 @@ import (
 )
 
 // Translatable interface for explicit association between struct fields and translation field IDs
-// TranslatableFieldMap returns a map: key = struct field name, value = translation field ID in DB
+// TranslatableFields returns a map: key = struct field name, value = translation field ID in DB
 // Example: map[string]string{"Title": "title", "Description": "desc", "Recommendation": "rec"}
 type Translatable interface {
 	TranslationLocale() Locale
 	TranslationEntityID() int
-	TranslatableFieldMap() map[string]string
+	TranslatableFields() map[string]string
 }
 
 // Translator interface for single-locale translation operations
@@ -124,7 +124,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	if !ok {
 		return nil
 	}
-	fieldMap := translatable.TranslatableFieldMap()
+	fieldMap := translatable.TranslatableFields()
 	idToIndex := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
 		name := typ.Field(i).Name
@@ -160,7 +160,7 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 	if !ok {
 		return nil, nil
 	}
-	fieldMap := translatable.TranslatableFieldMap()
+	fieldMap := translatable.TranslatableFields()
 	for i := 0; i < v.NumField(); i++ {
 		field := t.Field(i)
 		name := field.Name

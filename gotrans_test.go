@@ -18,7 +18,7 @@ var _ Translatable = (*Parameter)(nil)
 
 func (p Parameter) TranslationLocale() Locale   { return p.Locale }
 func (p Parameter) TranslationEntityID() int    { return p.ID }
-func (p Parameter) TranslatableFieldMap() map[string]string {
+func (p Parameter) TranslatableFields() map[string]string {
 	return map[string]string{
 		"Name":        "name",
 		"Description": "description",

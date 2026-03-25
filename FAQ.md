@@ -2,225 +2,276 @@
 
 ## General Questions
 
-### Q: Why embed locale in the entity instead of passing it as a parameter?
+### Q: Why embed locale in the entity?
 
-**A:** There are several reasons:
-
-1. **Cleaner API**: Fewer function parameters make the code more readable
-2. **Type Safety**: Locale becomes part of the entity contract
-3. **Performance**: Enables automatic grouping optimization
-4. **Semantics**: It makes sense logically - an entity in a specific locale
+**A:** Entities are self-describing and carry all context needed for translation operations. This enables automatic grouping optimization and eliminates redundant parameters.
 
 ### Q: Does this affect database performance?
 
-**A:** Actually, it **improves** database performance:
-
-- **Save Operations**: If you save 100 entities with mixed locales, the old API would make 100 database calls (one per entity). The new API groups by locale and makes fewer calls.
-- **Example**: 100 entities with 2 locales = 2 database calls instead of 100
-- **Load Operations**: No change - already optimized
-
-### Q: How do I migrate from the old API?
-
-**A:** See the "Migration Path" section in `ARCHITECTURE.md` for detailed examples.
-
-## Technical Questions
+**A:** It improves it. The library automatically groups translations by locale before saving, reducing database calls significantly (up to 100x for batch operations).
 
 ### Q: What if my entity doesn't need translations?
 
-**A:** Then you don't need the translator. Just use a normal entity without implementing `Translatable`.
+**A:** Then you don't use the library. Just use plain structs without implementing the `Translatable` interface.
 
-### Q: Can I translate different entities with different locales in a single call?
+## Technical Questions
 
-**A:** Yes! That's actually the strong point of this design:
+### Q: Can I translate different entity types together?
+
+**A:** Each translator is specific to one entity type via generics. Create multiple translators for different types:
 
 ```go
-products := []Product{
+productTrans := gotrans.NewTranslator[Product](repo)
+categoryTrans := gotrans.NewTranslator[Category](repo)
+```
+
+### Q: Can I use mixed locales in one call?
+
+**A:** Yes, that's actually the strong point:
+
+```go
+entities := []Product{
     {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple"},
     {ID: 2, Locale: gotrans.LocaleFR, Title: "Pomme"},
 }
-translator.SaveTranslations(ctx, products)
+translator.SaveTranslations(ctx, entities)
 ```
 
-The translator will automatically group them by locale and save efficiently.
+The library automatically optimizes this.
 
-### Q: Can I change the locale of an entity after creation?
+### Q: Can I change locale after creation?
 
-**A:** Yes, you can change the `Locale` field anytime:
+**A:** Yes:
 
 ```go
 product.Locale = gotrans.LocaleFR
-translator.LoadTranslations(ctx, []Product{product})
+products, _ := translator.LoadTranslations(ctx, []Product{product})
 ```
 
-This will load French translations for that product.
+### Q: What is LocaleNone?
 
-### Q: What happens if the locale is LocaleNone?
-
-**A:** `LocaleNone` (value 0) is used for special cases like deleting all translations for an entity regardless of locale. For normal translation operations, always set a specific locale.
-
-### Q: Can I have multiple translators?
-
-**A:** Yes, you can create multiple translator instances:
-
-```go
-productTranslator := gotrans.NewTranslator[Product](repo)
-categoryTranslator := gotrans.NewTranslator[Category](repo)
-```
-
-Both use the same repository, but work with different entity types.
+**A:** It's the zero value (0). Use it only in `DeleteTranslationsByEntity` to delete across all locales.
 
 ## Field Mapping Questions
 
-### Q: Why do I need TranslatableFieldMap()?
+### Q: Why do I need TranslatableFields()?
 
-**A:** Because struct field names might not match database field IDs:
-
-- Struct field: `Title` (PascalCase)
-- DB field: `title` (lowercase)
-- DB field: `product_title` (with prefix)
-
-The map explicitly defines the relationship.
-
-### Q: What field types are supported?
-
-**A:** Currently only `string` fields are translatable. If you try to translate other types, they're skipped.
+**A:** It decouples struct field names from database field names:
 
 ```go
-type Product struct {
-    ID    int     // Not translatable
-    Title string  // Translatable ✓
-    Price float64 // Not translatable
+// Struct: Title (PascalCase)
+// Database: title (snake_case)
+return map[string]string{
+    "Title": "title",  // ← Explicit mapping
 }
 ```
 
-### Q: Can I translate computed fields?
+### Q: What field types are supported?
 
-**A:** No, only struct fields. If you need to translate computed values, store them as regular fields first.
+**A:** Only `string` fields are translatable. Other types are ignored.
+
+```go
+type Product struct {
+    ID    int     // ✗ Not translatable
+    Title string  // ✓ Translatable
+    Price float64 // ✗ Not translatable
+}
+```
+
+### Q: Can I translate computed/derived fields?
+
+**A:** No. Only struct fields. Store computed values as regular fields first.
 
 ## Database Questions
 
-### Q: What database systems are supported?
+### Q: What databases are supported?
 
-**A:** Any database supported by `sqlx`:
+**A:** Any database supported by sqlx:
 - MySQL
 - PostgreSQL
 - SQLite
 - Oracle
 - SQL Server
-- And others
 
 ### Q: Can I use a different table name?
 
-**A:** Yes, modify the MySQL repository implementation to use a different table name. The current implementation hardcodes `translations`, but you can fork and customize.
+**A:** The repository hardcodes `translations`. To use a different name, implement a custom repository.
 
-### Q: What's the unique key for?
+### Q: What's the unique constraint for?
 
-**A:** The unique constraint ensures no duplicate translations:
+**A:** It prevents duplicate translations:
 
 ```sql
-UNIQUE KEY uniq_translation (entity, entity_id, field, locale)
+UNIQUE(entity, entity_id, field, locale)
 ```
 
-This prevents having two different values for the same field in the same language.
+One value per entity, field, and locale.
 
-### Q: Can I add custom columns to the translations table?
+### Q: Can I add custom columns?
 
-**A:** The library only uses the columns it knows about. You can add custom columns, but they won't be used by the translator.
+**A:** You can, but the library won't use them. It only works with the defined columns.
 
 ## Performance Questions
 
-### Q: How much faster is batch save with grouping?
+### Q: How much faster is batch save?
 
-**A:** Depends on the number of locales:
+**A:**
+- 100 entities, 1 locale: **100x faster** (100 calls → 1)
+- 100 entities, 2 locales: **50x faster** (100 calls → 2)
+- 100 entities, 10 locales: **10x faster** (100 calls → 10)
 
-- 100 entities, 1 locale: 100x faster (100 calls → 1 call)
-- 100 entities, 2 locales: 50x faster (100 calls → 2 calls)
-- 100 entities, 10 locales: 10x faster (100 calls → 10 calls)
-
-The improvement is proportional to the number of entities divided by the number of locales.
+The improvement depends on the locale distribution.
 
 ### Q: Does reflection impact performance?
 
-**A:** Reflection is only used during `SaveTranslations()` and `LoadTranslations()`, not in query paths. The impact is negligible compared to database I/O.
+**A:** No. Reflection is only used during save/load, not in query paths. Database I/O dominates.
 
-### Q: Can I pre-allocate slices for better performance?
+### Q: Can I pre-allocate slices?
 
-**A:** Yes, if you know the expected number of translations:
-
-```go
-translations := make([]Translation, 0, expectedSize)
-```
-
-The library will still work with dynamically allocated slices.
+**A:** Yes, for better memory efficiency, but it's not required. The library handles dynamic allocation.
 
 ## Testing Questions
 
-### Q: How do I test my translatable entities?
+### Q: How do I test with this library?
 
 **A:** Mock the repository:
 
 ```go
-mockRepo := &mockRepo{
-    translations: []gotrans.Translation{
-        // Your test data
-    },
+mockRepo := &mockRepository{
+    data: []gotrans.Translation{ /* test data */ },
 }
 translator := gotrans.NewTranslator[MyEntity](mockRepo)
 ```
 
 See `gotrans_test.go` for examples.
 
-### Q: Do I need to test the translator itself?
+### Q: Do I need to test the library itself?
 
-**A:** No, it's already well-tested. Focus on testing your entity implementation and business logic.
+**A:** No. Focus on testing your entity implementation and business logic. The library is well-tested.
 
 ## Troubleshooting
 
-### Q: I'm getting "not all code paths return a value"
+### Issue: "does not satisfy Translatable"
 
-**A:** Make sure you're implementing all three interface methods:
-- `TranslationLocale()` - returns Locale
-- `TranslationEntityID()` - returns int
-- `TranslatableFieldMap()` - returns map[string]string
+**Solution**: Implement all three methods:
 
-### Q: Translations aren't being loaded
+```go
+func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationEntityID() int { return p.ID }
+func (p Product) TranslatableFields() map[string]string { /* ... */ }
+```
 
-**A:** Check:
-1. Is `TranslatableFieldMap()` returning the correct field IDs?
-2. Is the entity locale set correctly before loading?
-3. Do translations exist in the database for that locale and entity ID?
+### Issue: Translations not loading
 
-### Q: Translations aren't being saved
+**Check**:
+1. Is `TranslatableFields()` mapping correct?
+2. Is entity locale set before load?
+3. Do translations exist in the database?
 
-**A:** Check:
-1. Are the translatable fields (string fields) populated?
-2. Is the entity locale set before saving?
-3. Is the repository connected to a working database?
+```go
+product := Product{ID: 1, Locale: gotrans.LocaleEN}
+products, _ := translator.LoadTranslations(ctx, []Product{product})
+```
 
-### Q: I'm getting unique constraint violations
+### Issue: Unique constraint violation
 
-**A:** This happens when trying to insert duplicate translations. The library uses `MassCreateOrUpdate` which deletes before inserting. If you're calling save multiple times in quick succession, you might hit a race condition. Use transactions to be safe.
+**Cause**: You're inserting duplicate translations.
+
+**Solution**: `SaveTranslations` uses `MassCreateOrUpdate` which handles this. Use it consistently.
+
+### Issue: Empty fields after load
+
+**Cause**: Translations don't exist for that locale.
+
+**Solution**: Check if the field is empty:
+
+```go
+if product.Title == "" {
+    fmt.Println("Translation not found")
+}
+```
+
+## Supported Locales
+
+The library includes 41 languages:
+
+**European**: English, French, German, Spanish, Italian, Portuguese, Russian, Ukrainian, Polish, Czech, Slovak, Hungarian, Bulgarian, Croatian, Serbian, Slovenian, Romanian, Lithuanian, Latvian, Norwegian, Swedish, Danish, Finnish, Estonian
+
+**Asian**: Chinese, Japanese, Korean, Vietnamese, Thai, Indonesian
+
+**Middle Eastern/African**: Arabic, Hebrew, Turkish, Persian, Georgian, Kazakh, Macedonian, Albanian, Bosnian, Azerbaijani
+
+Use constants: `gotrans.LocaleEN`, `gotrans.LocaleFR`, etc.
+
+Convert from codes: `gotrans.ParseLocale("en")`
+
+## Migration Guide
+
+If you're integrating this library into an existing system:
+
+### Step 1: Add Locale Field
+
+```go
+type MyEntity struct {
+    ID     int
+    Locale gotrans.Locale  // ← Add this
+    // ... other fields
+}
+```
+
+### Step 2: Implement Interface
+
+```go
+func (m MyEntity) TranslationLocale() gotrans.Locale { return m.Locale }
+func (m MyEntity) TranslationEntityID() int { return m.ID }
+func (m MyEntity) TranslatableFields() map[string]string {
+    return map[string]string{
+        "Field1": "field_1",
+        "Field2": "field_2",
+    }
+}
+```
+
+### Step 3: Create Translator
+
+```go
+repo := mysql.NewTranslationRepository(db)
+translator := gotrans.NewTranslator[MyEntity](repo)
+```
+
+### Step 4: Use API
+
+```go
+// Save
+entity.Locale = gotrans.LocaleEN
+translator.SaveTranslations(ctx, []MyEntity{entity})
+
+// Load
+entity = MyEntity{ID: 1, Locale: gotrans.LocaleEN}
+entities, _ := translator.LoadTranslations(ctx, []MyEntity{entity})
+
+// Delete
+translator.DeleteTranslations(ctx, gotrans.LocaleEN, "my_entity", []int{1}, []string{"field_1"})
+```
 
 ## Feature Requests
 
 ### Q: Can I have nested/hierarchical translations?
 
-**A:** Not directly. You would need to flatten them into separate string fields.
+**A:** Not directly. Flatten them into separate string fields.
 
-### Q: Can I translate non-string fields?
+### Q: Can I translate non-string types?
 
-**A:** Not with the current implementation. You'd need to modify the `extractTranslations()` and `applyTranslations()` functions to support other types.
+**A:** Not built-in. You'd need to modify the library to support it.
 
-### Q: Can I have partial translations (missing some locales)?
+### Q: Can I have partial translations?
 
-**A:** Yes, the library handles this gracefully:
-- If a translation doesn't exist for a locale, the field remains as-is
-- You can check if a field is empty to see if translation is missing
+**A:** Yes. If a translation is missing, the field remains as-is.
 
 ## Related Resources
 
-- See `ARCHITECTURE.md` for design decision details
-- See `example/main.go` for working examples
-- See `gotrans_test.go` for test examples
-- See `README.md` for API documentation
+- **README.md** - Quick start guide
+- **ARCHITECTURE.md** - Design details
+- **QUICK_START.md** - Quick reference
+- **example/main.go** - Working examples
 

@@ -22,7 +22,7 @@ type Product struct {
 // Implement Translatable interface
 func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
 func (p Product) TranslationEntityID() int          { return p.ID }
-func (p Product) TranslatableFieldMap() map[string]string {
+func (p Product) TranslatableFields() map[string]string {
 	return map[string]string{
 		"Title":       "title",
 		"Description": "description",

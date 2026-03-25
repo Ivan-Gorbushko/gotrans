@@ -1,295 +1,147 @@
-# 📚 Gotrans Documentation Index
+# Documentation Index
 
-## Quick Navigation
+Choose what you need:
 
-Choose your entry point based on what you need:
+| Purpose | File | Time |
+|---------|------|------|
+| **Get started quickly** | [README.md](README.md) | 5 min |
+| **Understand the design** | [ARCHITECTURE.md](ARCHITECTURE.md) | 10 min |
+| **Quick reference** | [QUICK_START.md](QUICK_START.md) | 3 min |
+| **Find answers** | [FAQ.md](FAQ.md) | 10 min |
 
-### 🚀 **I just want to get started quickly**
-→ Read: [README.md](README.md) (5 min read)
+## README.md
 
-### 🤔 **I want to understand the design**
-→ Read: [ARCHITECTURE.md](ARCHITECTURE.md) (10 min read)
-
-### 📋 **I want to see what changed**
-→ Read: [REFACTOR.md](REFACTOR.md) (5 min read)
-
-### ❓ **I have questions**
-→ Read: [FAQ.md](FAQ.md) (10-15 min read)
-
-### ✅ **I want to know the complete status**
-→ Read: [SUMMARY.md](SUMMARY.md) (8 min read)
-
-### ✨ **I want to know what's been completed**
-→ Read: [COMPLETED.md](COMPLETED.md) (5 min read)
-
----
-
-## 📑 Documentation Files Overview
-
-### [README.md](README.md)
-**Purpose**: Quick start guide and API reference  
-**Contents**:
-- Concept overview
-- Entity example
-- Usage example
-- Translatable interface
-- MySQL table structure
-- Features list
-- How it works (save/load)
-- Example with SQLite
-
-**Read this if**: You want to get started immediately with the new API
-
----
-
-### [ARCHITECTURE.md](ARCHITECTURE.md)
-**Purpose**: Deep dive into design decisions and optimization  
-**Contents**:
-- Problem statement
-- Solution explanation
-- Locale grouping mechanism
-- Explicit field mapping benefits
+Your starting point. Contains:
+- Feature overview
+- Quick start (5 steps)
+- How it works
 - Database schema
-- API methods documentation
-- Reflection usage justification
-- Type safety explanation
-- Testing strategy
-- Migration path from old API
+- Entity name resolution
+- Supported locales
+- Multi-locale operations
+- Use cases
+- Best practices
 
-**Read this if**: You want to understand why things are designed this way
+**Read this first.**
 
----
+## ARCHITECTURE.md
 
-### [REFACTOR.md](REFACTOR.md)
-**Purpose**: Summary of all changes made  
-**Contents**:
-- Before vs after code
-- Key improvements (4 categories)
-- Migration checklist
-- Files modified list
-- Performance metrics table
-- Breaking changes note
-- Next steps
+Deep dive into design decisions:
+- Core principles
+- Optimization strategy
+- Save/load operations
+- Database design
+- Reflection justification
+- Type safety details
+- Performance analysis
+- Limitations
 
-**Read this if**: You want a high-level overview of changes
+**Read this to understand why.**
 
----
+## QUICK_START.md
 
-### [FAQ.md](FAQ.md)
-**Purpose**: Answers to common questions  
-**Contents**:
-- 40+ Q&A organized by category:
-  - General questions
-  - Technical questions
-  - Field mapping questions
-  - Database questions
-  - Performance questions
-  - Testing questions
-  - Troubleshooting
-  - Feature requests
-- Related resources
+Minimal code example:
+- Entity definition
+- Setup
+- Save/load/delete operations
+- Multi-locale example
 
-**Read this if**: You have specific questions or encounter issues
+**Read this for a quick reminder.**
 
----
+## FAQ.md
 
-### [SUMMARY.md](SUMMARY.md)
-**Purpose**: Complete project refactoring summary  
-**Contents**:
-- Project overview
-- Key improvements (4 sections)
-- Files created/modified
-- Performance impact (with metrics)
-- Testing results
-- API changes (before/after)
-- Implementation details
-- Migration path
-- Database schema
-- Documentation structure
-- How to use
-- Key features
-- Change summary
+40+ questions organized by category:
+- General questions
+- Technical questions
+- Field mapping
+- Database
+- Performance
+- Testing
+- Troubleshooting
+- Feature requests
 
-**Read this if**: You want the most comprehensive overview
+**Read this to find answers.**
 
----
+## Quick Links
 
-### [COMPLETED.md](COMPLETED.md)
-**Purpose**: Completion status and next steps  
-**Contents**:
-- What was done (3 main areas)
-- Quick start instructions
-- API changes summary
-- Performance improvement table
-- Migration checklist
-- Key features list
-- File summary
-- Next steps
+**By Task:**
+- Setting up: README.md → QUICK_START.md
+- Integrating: QUICK_START.md → ARCHITECTURE.md
+- Troubleshooting: FAQ.md
+- Learning: ARCHITECTURE.md
+- Coding: example/main.go
 
-**Read this if**: You just want to know what's done and how to proceed
+**By Role:**
+- **API Users**: README.md → QUICK_START.md → FAQ.md
+- **Developers**: QUICK_START.md → ARCHITECTURE.md → gotrans.go
+- **Maintainers**: ARCHITECTURE.md → gotrans.go → *_test.go
 
----
+**By Question:**
+- "How do I...?" → QUICK_START.md
+- "Why does...?" → ARCHITECTURE.md
+- "What if...?" → FAQ.md
+- "Show me code" → example/main.go
 
-## 🔍 Finding Specific Information
+## Testing
 
-| Question | File | Section |
-|----------|------|---------|
-| How do I use the API? | README.md | "Usage Example" |
-| Why was locale moved to entities? | ARCHITECTURE.md | "Problem Statement" |
-| What's the performance improvement? | SUMMARY.md | "Performance Impact" |
-| How do I migrate my code? | ARCHITECTURE.md | "Migration Path" |
-| Will my database data be lost? | REFACTOR.md | "Breaking Changes" |
-| Can I use multiple locales together? | FAQ.md | "Can I translate different entities..." |
-| How do I run the example? | README.md | "Example with SQLite" |
-| What tests are included? | SUMMARY.md | "Testing Results" |
-| Does reflection impact performance? | FAQ.md | "Does reflection impact..." |
-| What if translations are missing? | FAQ.md | "Can I have partial translations..." |
+```bash
+# Run all tests
+go test -v ./...
 
----
+# Run example
+go run ./example/main.go
+```
 
-## 📚 Reading Guide by Role
+## Key Concepts
 
-### For **API Users** (most people)
-1. Start: README.md
-2. Then: COMPLETED.md
-3. Questions: FAQ.md
-4. Examples: See example/main.go
+- **Embedded Locale**: Entity carries locale via `TranslationLocale()`
+- **Field Mapping**: Struct fields map to DB fields via `TranslatableFields()`
+- **Automatic Grouping**: Translations grouped by locale for optimization
+- **Type Safe**: Go generics ensure compile-time checking
+- **Multi-locale**: Multiple locales optimized automatically
 
-### For **Library Maintainers**
-1. Start: SUMMARY.md
-2. Then: ARCHITECTURE.md
-3. Code: gotrans.go
-4. Tests: gotrans_test.go
+## Performance
 
-### For **Decision Makers** (management, tech leads)
-1. Start: REFACTOR.md
-2. Then: SUMMARY.md (Performance Impact section)
-3. Then: ARCHITECTURE.md (Concept section)
+| Scenario | Calls | Improvement |
+|---|---|---|
+| 100 entities, 1 locale | 1 | 100x |
+| 100 entities, 2 locales | 2 | 50x |
+| 100 entities, 5 locales | 5 | 20x |
 
-### For **Developers Migrating Code**
-1. Start: REFACTOR.md
-2. Then: ARCHITECTURE.md (Migration Path section)
-3. Reference: FAQ.md
-4. Examples: example/main.go
+## Supported Databases
 
----
+- MySQL 5.7+
+- MySQL 8.0+
+- SQLite 3.x
+- PostgreSQL
+- Any sqlx-supported database
 
-## ⏱️ Recommended Reading Times
+## Supported Languages
 
-- **Total time**: ~45 minutes for full understanding
-- **Quick start**: ~5 minutes (README.md only)
-- **Decision making**: ~10 minutes (REFACTOR.md + SUMMARY.md)
-- **Migration**: ~20 minutes (ARCHITECTURE.md + examples)
-- **Deep dive**: ~40 minutes (all files)
+41 languages: English, French, German, Spanish, Italian, Russian, Chinese, Japanese, Korean, Arabic, and 31 more.
 
----
+## At a Glance
 
-## 🔗 Cross-References
+```go
+// Define entity
+type Product struct {
+    ID     int
+    Locale gotrans.Locale
+    Title  string
+}
 
-### By Topic
+// Implement interface
+func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationEntityID() int { return p.ID }
+func (p Product) TranslatableFields() map[string]string {
+    return map[string]string{"Title": "title"}
+}
 
-**Performance Optimization**
-- SUMMARY.md → "Performance Impact"
-- ARCHITECTURE.md → "How Locale Grouping Works"
-- REFACTOR.md → "Performance Metrics"
+// Use it
+translator := gotrans.NewTranslator[Product](repo)
+translator.SaveTranslations(ctx, entities)
+translator.LoadTranslations(ctx, entities)
+```
 
-**API Changes**
-- REFACTOR.md → "Before vs After"
-- README.md → "Usage Example"
-- ARCHITECTURE.md → "API Methods"
-
-**Database**
-- README.md → "MySQL Table Structure"
-- ARCHITECTURE.md → "Database Schema"
-- COMPLETED.md → "Migration for Your Project"
-
-**Testing**
-- SUMMARY.md → "Testing Results"
-- README.md → "Example with SQLite"
-- FAQ.md → "Testing Questions"
-
-**Migration**
-- REFACTOR.md → "Migration Checklist"
-- ARCHITECTURE.md → "Migration Path"
-- COMPLETED.md → "Migration for Your Project"
-
----
-
-## 💾 Files in the Project
-
-### Core Library
-- `gotrans.go` - Main translator implementation
-- `repository.go` - Repository interface
-- `translation.go` - Translation data model
-- `languages.go` - Supported locales (41 languages)
-
-### Implementation
-- `mysql/repository.go` - MySQL/SQLite implementation
-- `mysql/translation.go` - MySQL data model
-
-### Testing & Examples
-- `gotrans_test.go` - Unit tests (7 tests, all passing)
-- `example/main.go` - Working example with 6 demonstrations
-
-### Documentation (all in root)
-- `README.md` - API reference and quick start
-- `ARCHITECTURE.md` - Design decisions
-- `REFACTOR.md` - Change summary
-- `FAQ.md` - Questions and answers
-- `SUMMARY.md` - Complete overview
-- `COMPLETED.md` - Status and next steps
-
----
-
-## 🎯 Key Takeaways
-
-**What Changed:**
-- Locale moved from parameter to entity field
-- Automatic grouping optimization for batch operations
-- Cleaner, simpler API
-
-**Performance:**
-- 100x faster for batch operations with single locale
-- 50x faster with mixed locales
-- No change to load operations (already optimized)
-
-**Compatibility:**
-- Database schema unchanged ✅
-- Breaking API change (requires code update)
-- Easy migration path provided
-
-**Quality:**
-- All tests passing ✅
-- Comprehensive documentation ✅
-- Real-world examples ✅
-- Type-safe implementation ✅
-
----
-
-## ✅ Checklist for Getting Started
-
-- [ ] Read README.md (5 min)
-- [ ] Run `go test -v ./...` to verify tests
-- [ ] Run `go run ./example/main.go` to see it in action
-- [ ] Review your entity types
-- [ ] Add `Locale` field to translatable entities
-- [ ] Implement `TranslationLocale()` method
-- [ ] Update translator method calls
-- [ ] Test your changes
-
----
-
-## 📞 Support Resources
-
-**For quick answers**: FAQ.md  
-**For implementation help**: example/main.go  
-**For design understanding**: ARCHITECTURE.md  
-**For migration guidance**: REFACTOR.md + ARCHITECTURE.md Migration section  
-
----
-
-**Last Updated**: March 25, 2026  
-**Status**: Complete ✅  
-**All Tests**: Passing ✅  
-**Examples**: Working ✅
+**Start with [README.md](README.md)** →
 
