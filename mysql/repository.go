@@ -20,7 +20,7 @@ func NewTranslationRepository(db *sqlx.DB) gotrans.TranslationRepository {
 
 func (t *translationRepository) GetTranslations(
 	ctx context.Context,
-	locales []gotrans.Locale,
+	locale gotrans.Locale,
 	entity string,
 	entityIDs []int,
 ) ([]gotrans.Translation, error) {
@@ -28,10 +28,6 @@ func (t *translationRepository) GetTranslations(
 	const batchSize = 1000
 
 	var allMysqlTranslations []Translation
-	mysqlLocales := make([]string, len(locales))
-	for i, l := range locales {
-		mysqlLocales[i] = l.String()
-	}
 
 	for start := 0; start < len(entityIDs); start += batchSize {
 		end := start + batchSize
@@ -41,8 +37,8 @@ func (t *translationRepository) GetTranslations(
 		batchIDs := entityIDs[start:end]
 
 		query, args, err := sqlx.In(`
-			SELECT * FROM translations WHERE entity = ? AND locale IN (?) AND entity_id IN (?)
-		`, entity, mysqlLocales, batchIDs)
+			SELECT * FROM translations WHERE entity = ? AND locale = ? AND entity_id IN (?)
+		`, entity, locale.String(), batchIDs)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
@@ -79,7 +75,6 @@ func (t *translationRepository) MassCreate(
 		mysqlTranslations[i] = toMysqlTranslateModel(translations[i])
 	}
 
-	// Inserting new translations
 	insertQuery := `
 		INSERT INTO translations (entity, entity_id, field, locale, value)
 		VALUES (:entity, :entity_id, :field, :locale, :value)
@@ -93,22 +88,20 @@ func (t *translationRepository) MassCreate(
 
 func (t *translationRepository) MassDelete(
 	ctx context.Context,
+	locale gotrans.Locale,
 	entity string,
 	entityIDs []int,
 	fields []string,
-	locales []gotrans.Locale,
 ) error {
 	const op = "translationRepository.MassDelete"
 
-	mysqlLocales := make([]string, len(locales))
-	for i, l := range locales {
-		mysqlLocales[i] = l.String()
-	}
-
-	// Basic query and arguments
 	query := "DELETE FROM translations WHERE entity = ?"
 	args := []any{entity}
 
+	if locale != gotrans.LocaleNone {
+		query += " AND locale = ?"
+		args = append(args, locale.String())
+	}
 	if len(entityIDs) > 0 {
 		query += " AND entity_id IN (?)"
 		args = append(args, entityIDs)
@@ -117,16 +110,6 @@ func (t *translationRepository) MassDelete(
 		query += " AND field IN (?)"
 		args = append(args, fields)
 	}
-	if len(mysqlLocales) > 0 {
-		query += " AND locale IN (?)"
-		args = append(args, mysqlLocales)
-	}
-
-	// TODO: Need review this logic
-	// If only entity — do not delete anything
-	//if len(args) == 1 {
-	//	return nil
-	//}
 
 	query, args, err := sqlx.In(query, args...)
 	if err != nil {
@@ -143,6 +126,7 @@ func (t *translationRepository) MassDelete(
 
 func (t *translationRepository) MassCreateOrUpdate(
 	ctx context.Context,
+	locale gotrans.Locale,
 	translations []gotrans.Translation,
 ) error {
 	const op = "translationRepository.MassCreateOrUpdate"
@@ -152,23 +136,20 @@ func (t *translationRepository) MassCreateOrUpdate(
 
 	// Group translations by entity
 	type deleteParams struct {
-		IDs     map[int]struct{}
-		Fields  map[string]struct{}
-		Locales map[gotrans.Locale]struct{}
+		IDs    map[int]struct{}
+		Fields map[string]struct{}
 	}
 	entityMap := make(map[string]*deleteParams)
 
 	for _, tr := range translations {
 		if _, ok := entityMap[tr.Entity]; !ok {
 			entityMap[tr.Entity] = &deleteParams{
-				IDs:     make(map[int]struct{}),
-				Fields:  make(map[string]struct{}),
-				Locales: make(map[gotrans.Locale]struct{}),
+				IDs:    make(map[int]struct{}),
+				Fields: make(map[string]struct{}),
 			}
 		}
 		entityMap[tr.Entity].IDs[tr.EntityID] = struct{}{}
 		entityMap[tr.Entity].Fields[tr.Field] = struct{}{}
-		entityMap[tr.Entity].Locales[tr.Locale] = struct{}{}
 	}
 
 	// Remove translations for each entity
@@ -181,22 +162,16 @@ func (t *translationRepository) MassCreateOrUpdate(
 		for f := range params.Fields {
 			fields = append(fields, f)
 		}
-		var locales []gotrans.Locale
-		for l := range params.Locales {
-			locales = append(locales, l)
-		}
-		if err := t.MassDelete(ctx, entity, ids, fields, locales); err != nil {
+		if err := t.MassDelete(ctx, locale, entity, ids, fields); err != nil {
 			return fmt.Errorf("%s: %w", op, err)
 		}
 	}
 
-	// Converting to mysql models
 	mysqlTranslations := make([]Translation, len(translations))
 	for i := range translations {
 		mysqlTranslations[i] = toMysqlTranslateModel(translations[i])
 	}
 
-	// Saving new translations
 	if err := t.MassCreate(ctx, translations); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -210,7 +185,7 @@ func toMysqlTranslateModel(tr gotrans.Translation) Translation {
 		Entity:   tr.Entity,
 		EntityID: tr.EntityID,
 		Field:    tr.Field,
-		Locale:   tr.Locale.String(),
+		Locale:   tr.GetLocale().String(),
 		Value:    tr.Value,
 	}
 }
@@ -221,12 +196,5 @@ func toTranslateModel(mt Translation) gotrans.Translation {
 		locale = gotrans.LocaleNone
 	}
 
-	return gotrans.Translation{
-		ID:       mt.ID,
-		Entity:   mt.Entity,
-		EntityID: mt.EntityID,
-		Field:    mt.Field,
-		Locale:   locale,
-		Value:    mt.Value,
-	}
+	return gotrans.NewTranslation(mt.ID, mt.Entity, mt.EntityID, mt.Field, locale, mt.Value)
 }

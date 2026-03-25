@@ -9,122 +9,148 @@ import (
 
 type Parameter struct {
 	ID          int
-	Name        TranslateField `translatable:"true"`
-	Description TranslateField `translatable:"true"`
+	locale      Locale
+	Name        string
+	Description string
 }
 
-func (p Parameter) TranslationEntityID() int { return p.ID }
+var _ Translatable = (*Parameter)(nil)
+
+func (p Parameter) TranslationEntityLocale() Locale { return p.locale }
+func (p Parameter) TranslationEntityID() int        { return p.ID }
+func (p Parameter) TranslatableFields() map[string]string {
+	return map[string]string{
+		"Name":        "name",
+		"Description": "description",
+	}
+}
+func (p Parameter) TranslationEntityName() string { return "parameter" }
 
 func TestLoadTranslations(t *testing.T) {
-	repo := &mockRepo{}
-	locales := []Locale{LocaleEN, LocaleRU}
-	paramTrans := NewTranslator[Parameter](locales, repo)
+	repo := &mockRepo{
+		translations: []Translation{
+			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Example Name EN"),
+			NewTranslation(2, "parameter", 1, "description", LocaleEN, "Desc EN"),
+		},
+	}
+	paramTrans := NewTranslator[Parameter](repo)
 
-	parms := []Parameter{{ID: 1}}
+	parms := []Parameter{{ID: 1, locale: LocaleEN}}
 	ctx := context.Background()
-	parms, err := paramTrans.LoadTranslations(ctx, locales, parms)
+	parms, err := paramTrans.LoadTranslations(ctx, parms)
 	require.NoError(t, err)
 
-	require.Equal(t, "Example Name EN", parms[0].Name[LocaleEN])
-	require.Equal(t, "Пример имени RU", parms[0].Name[LocaleRU])
+	require.Equal(t, "Example Name EN", parms[0].Name)
+	require.Equal(t, "Desc EN", parms[0].Description)
 }
 
 func TestSaveTranslations(t *testing.T) {
 	repo := &mockRepo{}
-	locales := []Locale{LocaleEN, LocaleRU}
-	paramTrans := NewTranslator[Parameter](locales, repo)
+	paramTrans := NewTranslator[Parameter](repo)
 
 	parms := []Parameter{{
-		ID: 1,
-		Name: TranslateField{
-			LocaleEN: "New Name EN",
-			LocaleRU: "Новое имя RU",
-		},
-		Description: TranslateField{
-			LocaleEN: "Desc EN",
-			LocaleRU: "Описание RU",
-		},
+		ID:          1,
+		locale:      LocaleEN,
+		Name:        "New Name EN",
+		Description: "Desc EN",
 	}}
 	ctx := context.Background()
 	err := paramTrans.SaveTranslations(ctx, parms)
 	require.NoError(t, err)
 
-	require.Len(t, repo.saved, 4)
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "name",
-		Locale:   LocaleEN,
-		Value:    "New Name EN",
-	})
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "name",
-		Locale:   LocaleRU,
-		Value:    "Новое имя RU",
-	})
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "description",
-		Locale:   LocaleEN,
-		Value:    "Desc EN",
-	})
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "description",
-		Locale:   LocaleRU,
-		Value:    "Описание RU",
-	})
+	require.Len(t, repo.saved, 2)
+	// Check that translations were saved
+	hasName := false
+	hasDesc := false
+	for _, tr := range repo.saved {
+		if tr.Field == "name" && tr.Value == "New Name EN" && tr.Entity == "parameter" {
+			hasName = true
+		}
+		if tr.Field == "description" && tr.Value == "Desc EN" && tr.Entity == "parameter" {
+			hasDesc = true
+		}
+	}
+	require.True(t, hasName)
+	require.True(t, hasDesc)
 }
 
 func TestDeleteTranslations(t *testing.T) {
 	repo := &mockRepo{}
-	locales := []Locale{LocaleEN, LocaleRU}
-	paramTrans := NewTranslator[Parameter](locales, repo)
+	paramTrans := NewTranslator[Parameter](repo)
 
 	// Saving translations
 	parms := []Parameter{{
-		ID: 1,
-		Name: TranslateField{
-			LocaleEN: "Name EN",
-			LocaleRU: "Имя RU",
-		},
-		Description: TranslateField{
-			LocaleEN: "Desc EN",
-			LocaleRU: "Описание RU",
-		},
+		ID:          1,
+		locale:      LocaleEN,
+		Name:        "Name EN",
+		Description: "Desc EN",
 	}}
 	ctx := context.Background()
-	err := paramTrans.SaveTranslations(ctx, parms)
-	require.NoError(t, err)
-	require.Len(t, repo.saved, 4)
+	_ = paramTrans.SaveTranslations(ctx, parms)
+	require.Len(t, repo.saved, 2)
 
 	// Delete translations
 	entity := "parameter"
 	entityIDs := []int{1}
 	fields := []string{"name", "description"}
-	err = repo.MassDelete(ctx, entity, entityIDs, fields, locales)
+	err := repo.MassDelete(ctx, LocaleEN, entity, entityIDs, fields)
 	require.NoError(t, err)
 	require.Len(t, repo.saved, 0)
 }
 
+// TestMultiLocaleSaveAndLoad demonstrates that translations are grouped by locale
+// This test verifies that the translator efficiently handles multiple locales
+func TestMultiLocaleSaveAndLoad(t *testing.T) {
+	repo := &mockRepo{
+		translations: []Translation{
+			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Name EN"),
+			NewTranslation(2, "parameter", 2, "name", LocaleFR, "Name FR"),
+			NewTranslation(3, "parameter", 1, "description", LocaleEN, "Desc EN"),
+			NewTranslation(4, "parameter", 2, "description", LocaleFR, "Desc FR"),
+		},
+	}
+	paramTrans := NewTranslator[Parameter](repo)
+
+	// Load with mixed locales
+	parms := []Parameter{
+		{ID: 1, locale: LocaleEN},
+		{ID: 2, locale: LocaleFR},
+	}
+	ctx := context.Background()
+	parms, err := paramTrans.LoadTranslations(ctx, parms)
+	require.NoError(t, err)
+
+	require.Equal(t, "Name EN", parms[0].Name)
+	require.Equal(t, "Desc EN", parms[0].Description)
+	require.Equal(t, "Name FR", parms[1].Name)
+	require.Equal(t, "Desc FR", parms[1].Description)
+}
+
 type mockRepo struct {
-	saved []Translation
+	saved        []Translation
+	translations []Translation
 }
 
 func (m *mockRepo) GetTranslations(
 	_ context.Context,
-	_ []Locale,
+	locale Locale,
 	entity string,
-	_ []int,
+	entityIDs []int,
 ) ([]Translation, error) {
-	return []Translation{
-		{Entity: entity, EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Example Name EN"},
-		{Entity: entity, EntityID: 1, Field: "name", Locale: LocaleRU, Value: "Пример имени RU"},
-	}, nil
+	idSet := make(map[int]struct{}, len(entityIDs))
+	for _, id := range entityIDs {
+		idSet[id] = struct{}{}
+	}
+	var result []Translation
+	for _, tr := range m.translations {
+		if tr.Entity != entity || tr.GetLocale() != locale {
+			continue
+		}
+		if _, ok := idSet[tr.EntityID]; ok {
+			result = append(result, tr)
+		}
+	}
+	return result, nil
 }
 
 func (m *mockRepo) MassCreate(
@@ -137,29 +163,27 @@ func (m *mockRepo) MassCreate(
 
 func (m *mockRepo) MassDelete(
 	_ context.Context,
+	locale Locale,
 	entity string,
 	entityIDs []int,
 	fields []string,
-	locales []Locale,
 ) error {
 	// Delete translations by key
 	type key struct {
 		Entity   string
 		EntityID int
 		Field    string
-		Locale   Locale
+		Locale   string
 	}
 	toDelete := make(map[key]struct{})
 	for _, id := range entityIDs {
 		for _, field := range fields {
-			for _, locale := range locales {
-				toDelete[key{entity, id, field, locale}] = struct{}{}
-			}
+			toDelete[key{entity, id, field, locale.String()}] = struct{}{}
 		}
 	}
 	var filtered []Translation
 	for _, tr := range m.saved {
-		k := key{tr.Entity, tr.EntityID, tr.Field, tr.Locale}
+		k := key{tr.Entity, tr.EntityID, tr.Field, tr.GetLocale().String()}
 		if _, ok := toDelete[k]; !ok {
 			filtered = append(filtered, tr)
 		}
@@ -170,49 +194,12 @@ func (m *mockRepo) MassDelete(
 
 func (m *mockRepo) MassCreateOrUpdate(
 	ctx context.Context,
+	locale Locale,
 	translations []Translation,
 ) error {
-	// Group by entity, entityID, field, locale
-	entityMap := make(map[string]map[int]map[string]map[Locale]string)
-	for _, tr := range translations {
-		if _, ok := entityMap[tr.Entity]; !ok {
-			entityMap[tr.Entity] = make(map[int]map[string]map[Locale]string)
-		}
-		if _, ok := entityMap[tr.Entity][tr.EntityID]; !ok {
-			entityMap[tr.Entity][tr.EntityID] = make(map[string]map[Locale]string)
-		}
-		if _, ok := entityMap[tr.Entity][tr.EntityID][tr.Field]; !ok {
-			entityMap[tr.Entity][tr.EntityID][tr.Field] = make(map[Locale]string)
-		}
-		entityMap[tr.Entity][tr.EntityID][tr.Field][tr.Locale] = tr.Value
+	if len(translations) == 0 {
+		return nil
 	}
-	// Collecting parameters for MassDelete
-	for entity, ids := range entityMap {
-		var entityIDs []int
-		var fields []string
-		var locales []Locale
-		idSet := make(map[int]struct{})
-		fieldSet := make(map[string]struct{})
-		localeSet := make(map[Locale]struct{})
-		for id, flds := range ids {
-			idSet[id] = struct{}{}
-			for field, locs := range flds {
-				fieldSet[field] = struct{}{}
-				for locale := range locs {
-					localeSet[locale] = struct{}{}
-				}
-			}
-		}
-		for id := range idSet {
-			entityIDs = append(entityIDs, id)
-		}
-		for field := range fieldSet {
-			fields = append(fields, field)
-		}
-		for locale := range localeSet {
-			locales = append(locales, locale)
-		}
-		_ = m.MassDelete(ctx, entity, entityIDs, fields, locales)
-	}
+	_ = m.MassDelete(ctx, locale, translations[0].Entity, []int{translations[0].EntityID}, []string{translations[0].Field})
 	return m.MassCreate(ctx, translations)
 }

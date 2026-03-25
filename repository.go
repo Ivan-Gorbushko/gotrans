@@ -7,7 +7,7 @@ import (
 type TranslationRepository interface {
 	GetTranslations(
 		ctx context.Context,
-		locales []Locale,
+		locale Locale,
 		entity string,
 		entityIDs []int,
 	) ([]Translation, error)
@@ -19,14 +19,15 @@ type TranslationRepository interface {
 
 	MassDelete(
 		ctx context.Context,
-		Entity string,
-		EntityIDs []int,
-		Fields []string,
-		Locales []Locale,
+		locale Locale,
+		entity string,
+		entityIDs []int,
+		fields []string,
 	) error
 
 	MassCreateOrUpdate(
 		ctx context.Context,
+		locale Locale,
 		translations []Translation,
 	) error
 }
