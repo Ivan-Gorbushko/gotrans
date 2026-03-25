@@ -36,7 +36,7 @@ func (t *translationRepository) GetTranslations(
 			end = len(entityIDs)
 		}
 		query, args, err := sqlx.In(
-			`SELECT * FROM translations WHERE entity = ? AND locale = ? AND entity_id IN (?)`,
+			`SELECT id, entity, entity_id, field, locale, value FROM translations WHERE entity = ? AND locale = ? AND entity_id IN (?)`,
 			entity, locale.String(), entityIDs[start:end],
 		)
 		if err != nil {

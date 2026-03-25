@@ -31,17 +31,19 @@ type Translator[T Translatable] interface {
 var _ Translator[Translatable] = (*translator[Translatable])(nil)
 
 type translator[T Translatable] struct {
-	repo       TranslationRepository
-	entityName string // derived from T once at construction, never changes
+	repo        TranslationRepository
+	entityName  string          // derived from T once at construction, never changes
+	fieldIndex  map[string]int  // DB field ID → struct field index, pre-built once
 }
 
 // NewTranslator creates a translator for entity type T.
-// The entity name is resolved once from a zero value of T via TranslationEntityName().
+// The entity name and field index are resolved once from a zero value of T.
 func NewTranslator[T Translatable](repo TranslationRepository) Translator[T] {
 	var zero T
 	return &translator[T]{
 		repo:       repo,
 		entityName: zero.TranslationEntityName(),
+		fieldIndex: buildFieldIndex[T](),
 	}
 }
 
@@ -79,9 +81,6 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		return entities, nil
 	}
 
-	// Build struct field index once — identical for every entity of type T.
-	idToIndex := buildFieldIndex[T]()
-
 	// Build (entityID, locale) → []Translation lookup for O(1) access per entity.
 	type key struct {
 		id     int
@@ -93,7 +92,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		lookup[k] = append(lookup[k], tr)
 	}
 
-	// Apply translations to each entity.
+	// Apply translations to each entity using pre-built field index.
 	for i := range entities {
 		trs, ok := lookup[key{entities[i].TranslationEntityID(), entities[i].TranslationEntityLocale()}]
 		if !ok {
@@ -101,7 +100,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		}
 		v := reflect.ValueOf(&entities[i]).Elem()
 		for _, tr := range trs {
-			if idx, ok := idToIndex[tr.Field]; ok {
+			if idx, ok := t.fieldIndex[tr.Field]; ok {
 				if f := v.Field(idx); f.Kind() == reflect.String && f.CanSet() {
 					f.SetString(tr.Value)
 				}
@@ -160,6 +159,7 @@ func buildFieldIndex[T Translatable]() map[string]int {
 }
 
 // extractTranslations reads translatable string fields from an entity.
+// Iterates fieldMap directly (only translatable fields) instead of all struct fields.
 func extractTranslations(entity Translatable) []Translation {
 	v := reflect.ValueOf(entity)
 	if v.Kind() == reflect.Ptr {
@@ -168,27 +168,25 @@ func extractTranslations(entity Translatable) []Translation {
 	if v.Kind() != reflect.Struct {
 		return nil
 	}
-	typ := v.Type()
+
 	fieldMap := entity.TranslatableFields()
 	entityName := entity.TranslationEntityName()
 	entityID := entity.TranslationEntityID()
 	locale := entity.TranslationEntityLocale()
 
 	results := make([]Translation, 0, len(fieldMap))
-	for i := 0; i < v.NumField(); i++ {
-		fieldID, ok := fieldMap[typ.Field(i).Name]
-		if !ok {
+	for structFieldName, dbFieldID := range fieldMap {
+		f := v.FieldByName(structFieldName)
+		if !f.IsValid() || f.Kind() != reflect.String {
 			continue
 		}
-		if f := v.Field(i); f.Kind() == reflect.String {
-			results = append(results, Translation{
-				Entity:   entityName,
-				EntityID: entityID,
-				Field:    fieldID,
-				Locale:   locale,
-				Value:    f.String(),
-			})
-		}
+		results = append(results, Translation{
+			Entity:   entityName,
+			EntityID: entityID,
+			Field:    dbFieldID,
+			Locale:   locale,
+			Value:    f.String(),
+		})
 	}
 	return results
 }

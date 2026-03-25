@@ -156,6 +156,20 @@ func (l Locale) Name() string {
 	return ""
 }
 
+// String returns the ISO-639-1 code, or "none" for LocaleNone.
 func (l Locale) String() string {
+	if l == LocaleNone {
+		return "none"
+	}
 	return l.Code()
 }
+
+// AllLocales returns all supported locales in an unspecified order, excluding LocaleNone.
+func AllLocales() []Locale {
+	result := make([]Locale, 0, len(languages))
+	for l := range languages {
+		result = append(result, l)
+	}
+	return result
+}
+

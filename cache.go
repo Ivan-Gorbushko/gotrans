@@ -2,7 +2,7 @@ package gotrans
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -230,6 +230,8 @@ func (c *cachedRepository) MassCreateOrUpdate(
 }
 
 // invalidateByTranslations removes cache entries for the affected translations.
+// The idxMu lock is held for the entire operation (cache.Delete + index update)
+// to prevent a race where another goroutine could re-add a key between the two steps.
 func (c *cachedRepository) invalidateByTranslations(translations []Translation) {
 	seen := make(map[string]struct{}, len(translations))
 	keys := make([]string, 0, len(translations))
@@ -240,15 +242,16 @@ func (c *cachedRepository) invalidateByTranslations(translations []Translation) 
 			keys = append(keys, k)
 		}
 	}
-	c.cache.Delete(keys...)
+
 	c.idxMu.Lock()
+	defer c.idxMu.Unlock()
+	c.cache.Delete(keys...)
 	for _, tr := range translations {
 		eKey := entityIndexKey(tr.Entity, tr.EntityID)
 		if keyset, ok := c.entityIndex[eKey]; ok {
 			delete(keyset, translationCacheKey(tr.Locale, tr.Entity, tr.EntityID))
 		}
 	}
-	c.idxMu.Unlock()
 }
 
 // invalidateAllLocales removes all cached entries for the given entity IDs
@@ -293,11 +296,12 @@ func (c *cachedRepository) untrackKeys(entity string, entityIDs []int, keys []st
 }
 
 // translationCacheKey builds the per-entity-locale cache key.
+// Uses string concatenation instead of fmt.Sprintf for better hot-path performance.
 func translationCacheKey(locale Locale, entity string, entityID int) string {
-	return fmt.Sprintf("%s:%s:%d", locale.String(), entity, entityID)
+	return locale.String() + ":" + entity + ":" + strconv.Itoa(entityID)
 }
 
 // entityIndexKey builds the entity-level index key used for cross-locale invalidation.
 func entityIndexKey(entity string, entityID int) string {
-	return fmt.Sprintf("%s:%d", entity, entityID)
+	return entity + ":" + strconv.Itoa(entityID)
 }
