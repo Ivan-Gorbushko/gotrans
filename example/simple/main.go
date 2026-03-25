@@ -115,7 +115,8 @@ func main() {
 
 	// Example 5: Delete translations for specific locale
 	fmt.Println("\n=== Example 5: Delete English Translations ===")
-	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, "product", []int{1}, []string{"title", "description"})
+	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN,
+		[]int{1, 2}, []string{"title", "description"})
 
 	fmt.Println("Remaining translations:")
 	rows, _ = db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations ORDER BY locale, entity_id")
@@ -134,7 +135,7 @@ func main() {
 
 	// Example 6: Delete all translations for entity
 	fmt.Println("\n=== Example 6: Delete All Translations for Entities ===")
-	_ = translator.DeleteTranslationsByEntity(ctx, "product", []int{1, 2})
+	_ = translator.DeleteTranslationsByEntity(ctx, []int{1, 2})
 
 	fmt.Println("After delete all:")
 	rows, _ = db.Queryx("SELECT COUNT(*) FROM translations")

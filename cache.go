@@ -191,13 +191,6 @@ func (c *cachedRepository) GetTranslations(
 	return append(result, fetched...), nil
 }
 
-func (c *cachedRepository) MassCreate(ctx context.Context, translations []Translation) error {
-	if err := c.repo.MassCreate(ctx, translations); err != nil {
-		return err
-	}
-	c.invalidateByTranslations(translations)
-	return nil
-}
 
 func (c *cachedRepository) MassDelete(
 	ctx context.Context,

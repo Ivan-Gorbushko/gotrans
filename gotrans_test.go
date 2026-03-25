@@ -153,14 +153,6 @@ func (m *mockRepo) GetTranslations(
 	return result, nil
 }
 
-func (m *mockRepo) MassCreate(
-	_ context.Context,
-	translations []Translation,
-) error {
-	m.saved = append(m.saved, translations...)
-	return nil
-}
-
 func (m *mockRepo) MassDelete(
 	_ context.Context,
 	locale Locale,
@@ -192,35 +184,30 @@ func (m *mockRepo) MassDelete(
 }
 
 func (m *mockRepo) MassCreateOrUpdate(
-	ctx context.Context,
-	locale Locale,
+	_ context.Context,
+	_ Locale,
 	translations []Translation,
 ) error {
 	if len(translations) == 0 {
 		return nil
 	}
-	
-	// Collect all unique entity IDs and fields to delete
+
+	// Remove existing entries for the same (entity, entityID, field) combinations.
 	type key struct {
 		entity string
 		id     int
 		field  string
 	}
-	toDelete := make(map[key]struct{})
+	toDelete := make(map[key]struct{}, len(translations))
 	for _, tr := range translations {
 		toDelete[key{tr.Entity, tr.EntityID, tr.Field}] = struct{}{}
 	}
-	
-	// Delete matching translations
-	var filtered []Translation
+	filtered := m.saved[:0:0]
 	for _, tr := range m.saved {
-		k := key{tr.Entity, tr.EntityID, tr.Field}
-		if _, ok := toDelete[k]; !ok {
+		if _, ok := toDelete[key{tr.Entity, tr.EntityID, tr.Field}]; !ok {
 			filtered = append(filtered, tr)
 		}
 	}
-	m.saved = filtered
-	
-	// Insert new translations
-	return m.MassCreate(ctx, translations)
+	m.saved = append(filtered, translations...)
+	return nil
 }

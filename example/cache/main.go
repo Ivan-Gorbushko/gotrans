@@ -125,7 +125,7 @@ func main() {
 
 	// --- Example 5: Cache invalidation on delete (specific locale) ---
 	fmt.Println("\n=== Example 5: Cache Invalidation on Delete (EN only) ===")
-	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, "product", []int{2}, []string{"title", "description"})
+	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, []int{2}, []string{"title", "description"})
 	fmt.Println("  Deleted EN translations for product 2 — cache invalidated.")
 
 	// FR cache for product 2 is still valid
@@ -136,7 +136,7 @@ func main() {
 
 	// --- Example 6: Delete all locales — cross-locale cache eviction ---
 	fmt.Println("\n=== Example 6: Delete All Locales (cross-locale eviction) ===")
-	_ = translator.DeleteTranslationsByEntity(ctx, "product", []int{1})
+	_ = translator.DeleteTranslationsByEntity(ctx, []int{1})
 	fmt.Println("  Deleted all translations for product 1 — all locale cache entries evicted.")
 
 	// Both EN and FR must reload from DB (empty now)

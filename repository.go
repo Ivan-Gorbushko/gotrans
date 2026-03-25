@@ -12,11 +12,6 @@ type TranslationRepository interface {
 		entityIDs []int,
 	) ([]Translation, error)
 
-	MassCreate(
-		ctx context.Context,
-		translations []Translation,
-	) error
-
 	MassDelete(
 		ctx context.Context,
 		locale Locale,
