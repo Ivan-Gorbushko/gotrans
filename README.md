@@ -371,6 +371,70 @@ type Feature struct {
 func (f Feature) TranslationEntityName() string { return "feature" }
 ```
 
+## Caching
+
+Caching is an **optional**, **opt-in** layer. The main `Translator` and `TranslationRepository` interfaces are not affected — caching is added by wrapping the repository with `NewCachedRepository` or `NewCachedRepositoryInMemory`.
+
+### Built-in In-Memory Cache
+
+```go
+import "time"
+
+repo := mysql.NewTranslationRepository(db)
+
+cachedRepo := gotrans.NewCachedRepositoryInMemory(repo, gotrans.CacheOptions{
+    TTL: 5 * time.Minute,  // 0 means entries never expire
+})
+
+translator := gotrans.NewTranslator[Product](cachedRepo)
+```
+
+Everything else stays the same. Cache invalidation is **automatic** on save and delete.
+
+### Custom Cache Backend (Redis, etc.)
+
+Implement the `TranslationCache` interface to plug in any backend:
+
+```go
+type TranslationCache interface {
+    Get(key string) ([]Translation, bool)
+    Set(key string, value []Translation, ttl time.Duration)
+    Delete(keys ...string)
+    Clear()
+}
+```
+
+```go
+type RedisCache struct { client *redis.Client }
+
+func (r *RedisCache) Get(key string) ([]gotrans.Translation, bool)                    { /* ... */ }
+func (r *RedisCache) Set(key string, v []gotrans.Translation, ttl time.Duration)       { /* ... */ }
+func (r *RedisCache) Delete(keys ...string)                                            { /* ... */ }
+func (r *RedisCache) Clear()                                                           { /* ... */ }
+
+// Wire it up
+cachedRepo := gotrans.NewCachedRepository(repo, &RedisCache{client}, gotrans.CacheOptions{
+    TTL: 10 * time.Minute,
+})
+translator := gotrans.NewTranslator[Product](cachedRepo)
+```
+
+### Cache Invalidation
+
+Invalidation is automatic and transparent:
+
+| Operation | Invalidated entries |
+|---|---|
+| `SaveTranslations` | All cache keys for affected entities + locale |
+| `DeleteTranslations` | Cache keys for specified locale + entity IDs |
+| `DeleteTranslationsByEntity` | All locale variants for specified entity IDs |
+
+### Cache Behaviour Details
+
+- **Cache-aside pattern**: per entity ID, so a batch of 100 entities with 90 already cached triggers only 10 DB rows.
+- **Empty results are cached**: if an entity has no translations, the empty result is cached to avoid repeated DB hits.
+- **Cross-locale invalidation**: `DeleteTranslationsByEntity` correctly evicts every locale's entry for those entities using an internal entity index — without scanning the whole cache.
+
 ## Best Practices
 
 1. **Make Locale Field Private** - Use lowercase for locale field and expose via `TranslationEntityLocale()` method

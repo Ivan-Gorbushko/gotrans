@@ -135,11 +135,18 @@ func (m *mockRepo) GetTranslations(
 	_ context.Context,
 	locale Locale,
 	entity string,
-	_ []int,
+	entityIDs []int,
 ) ([]Translation, error) {
+	idSet := make(map[int]struct{}, len(entityIDs))
+	for _, id := range entityIDs {
+		idSet[id] = struct{}{}
+	}
 	var result []Translation
 	for _, tr := range m.translations {
-		if tr.Entity == entity && tr.GetLocale() == locale {
+		if tr.Entity != entity || tr.GetLocale() != locale {
+			continue
+		}
+		if _, ok := idSet[tr.EntityID]; ok {
 			result = append(result, tr)
 		}
 	}

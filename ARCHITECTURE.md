@@ -424,6 +424,101 @@ Example with 1000 entities, 10 locales:
 - With optimization: 20 queries (2 per locale)
 - **Performance improvement: 50x faster**
 
+## Caching Layer
+
+### Design — Decorator Pattern
+
+Caching is implemented as a transparent decorator over `TranslationRepository`. The `Translator` has no knowledge of caching; it works with the same interface regardless of whether caching is enabled.
+
+```
+                    ┌────────────────────────────────────────┐
+                    │             Translator[T]              │
+                    │  LoadTranslations / SaveTranslations   │
+                    └────────────────┬───────────────────────┘
+                                     │ TranslationRepository
+                    ┌────────────────▼───────────────────────┐
+                    │         cachedRepository               │
+                    │  (wraps any TranslationRepository)     │
+                    │                                        │
+                    │  ┌──────────────────────────────────┐  │
+                    │  │        TranslationCache          │  │
+                    │  │  InMemoryCache / Redis / custom  │  │
+                    │  └──────────────────────────────────┘  │
+                    └────────────────┬───────────────────────┘
+                                     │ cache miss → forward
+                    ┌────────────────▼───────────────────────┐
+                    │    mysql.translationRepository         │
+                    │    (or any other implementation)       │
+                    └────────────────────────────────────────┘
+```
+
+### Cache Key Strategy — Per Entity ID
+
+Cache keys have the form `"locale:entity:entityID"`, e.g. `"en:product:42"`.
+
+This enables **partial cache hits**: when loading 100 entities and 90 are cached, only 10 rows are fetched from the database.
+
+```go
+// GetTranslations — cache-aside logic
+for _, id := range entityIDs {
+    key := "en:product:" + id
+    if cached, ok := cache.Get(key); ok {
+        result = append(result, cached...)
+    } else {
+        missedIDs = append(missedIDs, id)
+    }
+}
+// Fetch only missed IDs from DB
+fetched, _ := repo.GetTranslations(ctx, locale, entity, missedIDs)
+// Store each missed ID in cache individually
+for _, id := range missedIDs {
+    cache.Set("en:product:"+id, byID[id], ttl)
+}
+```
+
+### Cross-Locale Invalidation — Entity Index
+
+`DeleteTranslationsByEntity` deletes across all locales. Since cache keys include the locale, we need to know which locale keys exist for a given entity.
+
+The `cachedRepository` maintains an internal **entity index**:
+
+```
+entityIndex["product:42"] = {"en:product:42", "fr:product:42", "de:product:42"}
+```
+
+Every time a key is stored in cache, it is also recorded in the entity index. On delete-all-locales, the entity index is consulted to evict every locale variant without iterating the whole cache.
+
+### Automatic Invalidation
+
+All write operations invalidate the cache automatically:
+
+```go
+func (c *cachedRepository) MassCreateOrUpdate(...) error {
+    err := c.repo.MassCreateOrUpdate(...)  // write to DB first
+    c.invalidateByTranslations(translations)  // then evict cache
+    return err
+}
+```
+
+Invalidation always happens **after** the DB write succeeds, so a failed write never leaves stale cache.
+
+### TranslationCache Interface
+
+The cache backend is decoupled via a minimal interface:
+
+```go
+type TranslationCache interface {
+    Get(key string) ([]Translation, bool)
+    Set(key string, value []Translation, ttl time.Duration)
+    Delete(keys ...string)
+    Clear()
+}
+```
+
+Implementations can be:
+- `InMemoryCache` — built-in, zero dependencies, suitable for single-instance services
+- Redis, Memcached, or any custom store — implement the interface
+
 ## Limitations
 
 ### String Fields Only
