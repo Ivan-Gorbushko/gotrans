@@ -14,9 +14,9 @@ import (
 // Example entity with built-in locale
 type Product struct {
 	ID          int
-	locale      gotrans.Locale
 	Title       string
 	Description string
+	locale      gotrans.Locale
 }
 
 // Implement Translatable interface
