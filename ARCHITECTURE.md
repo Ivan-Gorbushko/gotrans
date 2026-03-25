@@ -13,12 +13,12 @@ Each entity carries its own locale information via the `TranslationLocale()` met
 ```go
 type Product struct {
     ID     int
-    Locale gotrans.Locale  // ← Embedded locale
+    locale gotrans.Locale  // ← Private field
     Title  string
 }
 
 func (p Product) TranslationLocale() gotrans.Locale {
-    return p.Locale
+    return p.locale
 }
 ```
 
@@ -27,8 +27,26 @@ func (p Product) TranslationLocale() gotrans.Locale {
 - No need for separate function parameters
 - Enables automatic grouping optimization
 - Type-safe design
+- Locale is private (not exported)
 
-### 2. Explicit Field Mapping
+### 2. Explicit Entity Naming
+
+The `TranslationEntityName()` method provides explicit control over entity naming:
+
+```go
+func (p Product) TranslationEntityName() string {
+    return "product"  // Exact name as stored in DB
+}
+```
+
+**Benefits:**
+- Complete control over database naming
+- Struct names can change without affecting translations
+- Clear separation of concerns
+- No automatic name conversion needed
+- Optional: Use reflection helpers if you prefer automatic naming
+
+### 3. Explicit Field Mapping
 
 The `TranslatableFields()` method provides explicit association between struct fields and database field IDs:
 
@@ -47,16 +65,16 @@ func (p Product) TranslatableFields() map[string]string {
 - Easy to rename fields without breaking translations
 - Clear, explicit mapping prevents bugs
 
-### 3. Automatic Locale Grouping
+### 4. Automatic Locale Grouping
 
 When saving or loading translations, the library automatically groups by locale:
 
 ```go
 // Developer writes:
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple"},
-    {ID: 1, Locale: gotrans.LocaleFR, Title: "Pomme"},
-    {ID: 2, Locale: gotrans.LocaleEN, Title: "Banana"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple"},
+    {ID: 1, locale: gotrans.LocaleFR, Title: "Pomme"},
+    {ID: 2, locale: gotrans.LocaleEN, Title: "Banana"},
 }
 translator.SaveTranslations(ctx, products)
 
@@ -75,15 +93,18 @@ translator.SaveTranslations(ctx, products)
 
 ```go
 func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) error {
-    // Step 1: Group translations by locale
+    // Step 1: Get entity name from first entity
+    entityName := entities[0].TranslationEntityName()
+    
+    // Step 2: Group translations by locale
     localeMap := make(map[Locale][]Translation)
     for _, e := range entities {
         locale := e.TranslationLocale()
-        translations := extractTranslations(...)
+        translations := extractTranslations(entityName, e.TranslationEntityID(), e, locale)
         localeMap[locale] = append(localeMap[locale], translations...)
     }
     
-    // Step 2: Save each locale group
+    // Step 3: Save each locale group
     for locale, translations := range localeMap {
         t.translationRepository.MassCreateOrUpdate(ctx, locale, translations)
     }
@@ -100,20 +121,24 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 
 ```go
 func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T, error) {
-    // Step 1: Group entities by locale
+    // Step 1: Get entity name from first entity
+    entityName := entities[0].TranslationEntityName()
+    
+    // Step 2: Group entities by locale
     localeMap := make(map[Locale][]int)
     for _, e := range entities {
         locale := e.TranslationLocale()
         localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
     }
     
-    // Step 2: Load translations for each locale group
+    // Step 3: Load translations for each locale group
+    var allTranslations []Translation
     for locale, entityIDs := range localeMap {
-        translations := t.translationRepository.GetTranslations(ctx, locale, entityType, entityIDs)
+        translations := t.translationRepository.GetTranslations(ctx, locale, entityName, entityIDs)
         allTranslations = append(allTranslations, translations...)
     }
     
-    // Step 3: Apply to entities
+    // Step 4: Apply to entities
     for i := range entities {
         t.applyTranslations(&entities[i], allTranslations)
     }
@@ -126,40 +151,28 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 ### Schema
 
 ```sql
-CREATE TABLE translations (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS translations (
+    id BIGINT AUTO_INCREMENT,
     entity VARCHAR(100) NOT NULL,
     entity_id BIGINT NOT NULL,
     field VARCHAR(100) NOT NULL,
     locale VARCHAR(10) NOT NULL,
     value TEXT NOT NULL,
-    UNIQUE(entity, entity_id, field, locale)
-);
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_translation (entity, entity_id, field, locale)
+)
+COLLATE = utf8mb4_unicode_ci;
 ```
 
-### Why This Design?
+### Schema Explanation
 
-1. **Normalized**: Each translation is a separate row
-2. **Scalable**: Works with any number of locales
-3. **Flexible**: Field mapping handled in code, not database
-4. **Consistent**: Unique constraint prevents duplicates
-
-### Entity Name Resolution
-
-Entity type names are converted to snake_case:
-
-```
-Product          → product
-ProductCategory  → product_category
-OrderItem        → order_item
-```
-
-This is handled by the `toSnakeCase()` utility function with special handling for acronyms:
-
-```
-AIRecommends  → ai_recommends
-AICRecommends → aic_recommends
-```
+- `id`: Auto-incrementing primary key
+- `entity`: Entity name (from `TranslationEntityName()`)
+- `entity_id`: Entity's primary key
+- `field`: Translatable field ID (from `TranslatableFields()` mapping)
+- `locale`: ISO-639-1 language code
+- `value`: Translated text
+- **Unique Constraint**: Prevents duplicate translations for the same entity, field, and locale
 
 ## Translator Interface
 
@@ -169,8 +182,9 @@ AICRecommends → aic_recommends
 LoadTranslations(ctx context.Context, entities []T) ([]T, error)
 ```
 
+- Gets entity name from first entity's `TranslationEntityName()` method
 - Groups entities by locale
-- Fetches translations for each locale
+- Fetches translations for each locale group
 - Populates string fields from translations
 - Returns modified entities
 
@@ -182,9 +196,10 @@ LoadTranslations(ctx context.Context, entities []T) ([]T, error)
 SaveTranslations(ctx context.Context, entities []T) error
 ```
 
-- Extracts translatable field values
-- Groups by locale
-- Uses `MassCreateOrUpdate` for each locale
+- Gets entity name from first entity's `TranslationEntityName()` method
+- Extracts translatable field values using reflection
+- Groups translations by locale
+- Uses `MassCreateOrUpdate` for each locale group
 - Handles creation and updates automatically
 
 ### DeleteTranslations
@@ -195,7 +210,7 @@ DeleteTranslations(ctx context.Context, locale Locale, entity string,
 ```
 
 - Deletes specific translations
-- Still requires locale parameter (for specificity)
+- Requires explicit locale parameter
 - Can target specific fields or all fields
 
 ### DeleteTranslationsByEntity
@@ -210,13 +225,14 @@ DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) 
 
 ## Reflection Usage
 
-The library uses reflection in two places:
+The library uses reflection in three places:
 
 ### 1. SaveTranslations (extractTranslations function)
 
 ```go
 func extractTranslations(entityName string, entityID int, entity any, locale Locale) ([]Translation, error) {
     v := reflect.ValueOf(entity)
+    translatable := entity.(Translatable)
     fieldMap := translatable.TranslatableFields()
     
     // For each field in field map
@@ -225,26 +241,32 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
         field := v.FieldByName(name)
         if field.Kind() == reflect.String {
             // Add translation
-            results = append(results, Translation{...})
+            results = append(results, NewTranslation(0, entityName, entityID, fieldID, locale, field.String()))
         }
     }
     return results, nil
 }
 ```
 
+**Purpose**: Extract string field values from struct for storage.
+
 ### 2. LoadTranslations (applyTranslations function)
 
 ```go
 func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
     v := reflect.ValueOf(entity).Elem()
+    translatable := any(entity).(Translatable)
+    entityName := translatable.TranslationEntityName()
     fieldMap := translatable.TranslatableFields()
     
     // For each translation matching this entity
     for _, tr := range translations {
-        if idx, ok := idToIndex[tr.Field]; ok {
-            field := v.Field(idx)
-            if field.Kind() == reflect.String && field.CanSet() {
-                field.SetString(tr.Value)
+        if tr.Entity == entityName && tr.GetLocale() == translatable.TranslationLocale() {
+            if idx, ok := idToIndex[tr.Field]; ok {
+                field := v.Field(idx)
+                if field.Kind() == reflect.String && field.CanSet() {
+                    field.SetString(tr.Value)
+                }
             }
         }
     }
@@ -252,10 +274,80 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 }
 ```
 
+**Purpose**: Apply fetched translations to struct fields.
+
+### 3. GetEntityNameFromType / GetEntityNameFromValue (Helpers)
+
+```go
+func GetEntityNameFromType[T any](t *T) string {
+    typ := reflect.TypeOf(t)
+    if typ.Kind() == reflect.Ptr {
+        typ = typ.Elem()
+    }
+    return toSnakeCase(typ.Name())
+}
+```
+
+**Purpose**: Optional helper for automatic snake_case conversion from struct names.
+
 **Why Reflection?**
 - Provides flexibility (works with any struct)
 - Eliminates boilerplate code generation
-- Performance impact negligible (only during save/load, not per-query)
+- Performance impact negligible (only during save/load, not in hot loops)
+- Alternative: Implement `TranslationEntityName()` manually for full control
+
+## Entity Naming Strategies
+
+### Strategy 1: Manual Implementation (Recommended)
+
+```go
+type Product struct { ... }
+func (p Product) TranslationEntityName() string { return "product" }
+
+type GeoTag struct { ... }
+func (g GeoTag) TranslationEntityName() string { return "geo_tag" }
+```
+
+**Pros:**
+- Full control over naming
+- Clear and explicit
+- No hidden magic
+
+**Cons:**
+- Must implement for each type
+
+### Strategy 2: Reflection Helper
+
+```go
+type Product struct { ... }
+func (p Product) TranslationEntityName() string { return gotrans.GetEntityNameFromType(&p) }
+```
+
+**Pros:**
+- Less boilerplate
+- Automatic snake_case conversion
+
+**Cons:**
+- Less explicit
+- Must remember to call helper
+
+### Strategy 3: Static Function
+
+```go
+const ProductEntityName = "product"
+
+type Product struct { ... }
+func (p Product) TranslationEntityName() string { return ProductEntityName }
+```
+
+**Pros:**
+- Reusable
+- Single source of truth
+- Easy to refactor
+
+**Cons:**
+- More code
+- More constants to manage
 
 ## Type Safety
 
@@ -278,7 +370,7 @@ translator := gotrans.NewTranslator[Product](repo)
 Compile-time verification that entity implements `Translatable`:
 
 ```go
-var _ Translatable = (*Product)(nil)
+var _ gotrans.Translatable = (*Product)(nil)
 ```
 
 ## Implementation Quality
@@ -325,6 +417,13 @@ The library is safe for concurrent use:
 ### Good Case
 - 100 entities, mixed locales: 2N queries where N = number of locales
 
+### Batch Operations
+
+Example with 1000 entities, 10 locales:
+- Without optimization: 1000 queries (1 per entity)
+- With optimization: 20 queries (2 per locale)
+- **Performance improvement: 50x faster**
+
 ## Limitations
 
 ### String Fields Only
@@ -354,12 +453,12 @@ type Product struct {
 
 ### Explicit Mapping Required
 
-Field mapping is required and must match actual fields:
+Field mapping is required and must match actual struct fields:
 
 ```go
 func (p Product) TranslatableFields() map[string]string {
     return map[string]string{
-        "Title": "title", // Must match actual field name
+        "Title": "title", // Must match actual struct field name
     }
 }
 ```
@@ -389,4 +488,15 @@ Uses sqlx for database abstraction, so compatible with any sqlx-supported databa
 Access via constants: `gotrans.LocaleEN`, `gotrans.LocaleFR`, etc.
 
 Convert from strings: `gotrans.ParseLocale("en")`
+
+## Summary
+
+The architecture of `gotrans` is built on these principles:
+
+1. **Simplicity**: Minimal API surface, easy to understand
+2. **Safety**: Type-safe with generics, compile-time checking
+3. **Performance**: Automatic optimization for batch operations
+4. **Flexibility**: Explicit field mapping and entity naming
+5. **Practicality**: Works with any sqlx-compatible database
+6. **Maintainability**: Clear code, well-documented, tested
 

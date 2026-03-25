@@ -14,13 +14,13 @@ import (
 // Example entity with built-in locale
 type Product struct {
 	ID          int
-	Locale      gotrans.Locale
+	locale      gotrans.Locale
 	Title       string
 	Description string
 }
 
 // Implement Translatable interface
-func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationLocale() gotrans.Locale { return p.locale }
 func (p Product) TranslationEntityID() int          { return p.ID }
 func (p Product) TranslatableFields() map[string]string {
 	return map[string]string{
@@ -28,6 +28,7 @@ func (p Product) TranslatableFields() map[string]string {
 		"Description": "description",
 	}
 }
+func (p Product) TranslationEntityName() string { return "product" }
 
 func main() {
 	ctx := context.Background()
@@ -61,8 +62,8 @@ func main() {
 	// Example 1: Save translations for English
 	fmt.Println("=== Example 1: Save English Translations ===")
 	products := []Product{
-		{ID: 1, Locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh fruit"},
-		{ID: 2, Locale: gotrans.LocaleEN, Title: "Banana", Description: "Yellow fruit"},
+		{ID: 1, locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh fruit"},
+		{ID: 2, locale: gotrans.LocaleEN, Title: "Banana", Description: "Yellow fruit"},
 	}
 	err = translator.SaveTranslations(ctx, products)
 	if err != nil {
@@ -72,8 +73,8 @@ func main() {
 	// Example 2: Save translations for French (demonstrates grouping by locale)
 	fmt.Println("\n=== Example 2: Save French Translations ===")
 	productsFR := []Product{
-		{ID: 1, Locale: gotrans.LocaleFR, Title: "Pomme", Description: "Fruit frais"},
-		{ID: 2, Locale: gotrans.LocaleFR, Title: "Banane", Description: "Fruit jaune"},
+		{ID: 1, locale: gotrans.LocaleFR, Title: "Pomme", Description: "Fruit frais"},
+		{ID: 2, locale: gotrans.LocaleFR, Title: "Banane", Description: "Fruit jaune"},
 	}
 	err = translator.SaveTranslations(ctx, productsFR)
 	if err != nil {
@@ -93,8 +94,8 @@ func main() {
 	// Example 3: Load translations for English
 	fmt.Println("\n=== Example 3: Load English Translations ===")
 	productsToLoad := []Product{
-		{ID: 1, Locale: gotrans.LocaleEN},
-		{ID: 2, Locale: gotrans.LocaleEN},
+		{ID: 1, locale: gotrans.LocaleEN},
+		{ID: 2, locale: gotrans.LocaleEN},
 	}
 	productsLoaded, _ := translator.LoadTranslations(ctx, productsToLoad)
 	for _, p := range productsLoaded {
@@ -104,8 +105,8 @@ func main() {
 	// Example 4: Load translations for French
 	fmt.Println("\n=== Example 4: Load French Translations ===")
 	productsToLoadFR := []Product{
-		{ID: 1, Locale: gotrans.LocaleFR},
-		{ID: 2, Locale: gotrans.LocaleFR},
+		{ID: 1, locale: gotrans.LocaleFR},
+		{ID: 2, locale: gotrans.LocaleFR},
 	}
 	productsLoadedFR, _ := translator.LoadTranslations(ctx, productsToLoadFR)
 	for _, p := range productsLoadedFR {

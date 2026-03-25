@@ -8,10 +8,12 @@ import (
 // Translatable interface for explicit association between struct fields and translation field IDs
 // TranslatableFields returns a map: key = struct field name, value = translation field ID in DB
 // Example: map[string]string{"Title": "title", "Description": "desc", "Recommendation": "rec"}
+// TranslationEntityName returns the name of the entity as stored in translations table
 type Translatable interface {
 	TranslationLocale() Locale
 	TranslationEntityID() int
 	TranslatableFields() map[string]string
+	TranslationEntityName() string
 }
 
 // Translator interface for single-locale translation operations
@@ -45,9 +47,9 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		return nil, nil
 	}
 	
-	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
-	entityType = toSnakeCase(entityType)
-	
+	// Get entity name from first entity
+	entityName := entities[0].TranslationEntityName()
+
 	// Group entities by locale for optimized loading
 	localeMap := make(map[Locale][]int)
 	for _, e := range entities {
@@ -58,7 +60,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 	// Load translations for each locale group
 	var allTranslations []Translation
 	for locale, entityIDs := range localeMap {
-		translations, err := t.translationRepository.GetTranslations(ctx, locale, entityType, entityIDs)
+		translations, err := t.translationRepository.GetTranslations(ctx, locale, entityName, entityIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -81,8 +83,8 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 		return nil
 	}
 	
-	entityType := reflect.TypeOf((*T)(nil)).Elem().Name()
-	entityName := toSnakeCase(entityType)
+	// Get entity name from first entity
+	entityName := entities[0].TranslationEntityName()
 	
 	// Group translations by locale for batch save
 	localeMap := make(map[Locale][]Translation)
@@ -119,11 +121,11 @@ func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, e
 func (t *translator[T]) applyTranslations(entity *T, translations []Translation) error {
 	v := reflect.ValueOf(entity).Elem()
 	typ := v.Type()
-	entityName := toSnakeCase(typ.Name())
 	translatable, ok := any(entity).(Translatable)
 	if !ok {
 		return nil
 	}
+	entityName := translatable.TranslationEntityName()
 	fieldMap := translatable.TranslatableFields()
 	idToIndex := make(map[string]int)
 	for i := 0; i < typ.NumField(); i++ {
@@ -134,7 +136,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	}
 	id := translatable.TranslationEntityID()
 	for _, tr := range translations {
-		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != translatable.TranslationLocale() {
+		if tr.Entity != entityName || tr.EntityID != id || tr.GetLocale() != translatable.TranslationLocale() {
 			continue
 		}
 		idx, ok := idToIndex[tr.Field]
@@ -170,13 +172,7 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 		}
 		f := v.Field(i)
 		if f.Kind() == reflect.String {
-			results = append(results, Translation{
-				Entity:   entityName,
-				EntityID: entityID,
-				Field:    fieldID,
-				Locale:   locale,
-				Value:    f.String(),
-			})
+			results = append(results, NewTranslation(0, entityName, entityID, fieldID, locale, f.String()))
 		}
 	}
 	return results, nil
@@ -211,4 +207,29 @@ func toLower(r rune) rune {
 		return r + ('a' - 'A')
 	}
 	return r
+}
+
+// ------------------------------------------------
+// --------------- Reflection Helpers -----------
+// ------------------------------------------------
+
+// GetEntityNameFromType returns the snake_case entity name from a type.
+// This is a helper function for when you don't want to implement TranslationEntityName()
+// Example: "Product" → "product", "GeoTag" → "geo_tag"
+func GetEntityNameFromType[T any](t *T) string {
+	typ := reflect.TypeOf(t)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return toSnakeCase(typ.Name())
+}
+
+// GetEntityNameFromValue returns the snake_case entity name from a value.
+// This is a helper function for when you don't want to implement TranslationEntityName()
+func GetEntityNameFromValue(v any) string {
+	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	return toSnakeCase(typ.Name())
 }

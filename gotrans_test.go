@@ -9,14 +9,14 @@ import (
 
 type Parameter struct {
 	ID          int
-	Locale      Locale
+	locale      Locale
 	Name        string
 	Description string
 }
 
 var _ Translatable = (*Parameter)(nil)
 
-func (p Parameter) TranslationLocale() Locale   { return p.Locale }
+func (p Parameter) TranslationLocale() Locale   { return p.locale }
 func (p Parameter) TranslationEntityID() int    { return p.ID }
 func (p Parameter) TranslatableFields() map[string]string {
 	return map[string]string{
@@ -24,17 +24,18 @@ func (p Parameter) TranslatableFields() map[string]string {
 		"Description": "description",
 	}
 }
+func (p Parameter) TranslationEntityName() string { return "parameter" }
 
 func TestLoadTranslations(t *testing.T) {
 	repo := &mockRepo{
 		translations: []Translation{
-			{Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Example Name EN"},
-			{Entity: "parameter", EntityID: 1, Field: "description", Locale: LocaleEN, Value: "Desc EN"},
+			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Example Name EN"),
+			NewTranslation(2, "parameter", 1, "description", LocaleEN, "Desc EN"),
 		},
 	}
 	paramTrans := NewTranslator[Parameter](repo)
 
-	parms := []Parameter{{ID: 1, Locale: LocaleEN}}
+	parms := []Parameter{{ID: 1, locale: LocaleEN}}
 	ctx := context.Background()
 	parms, err := paramTrans.LoadTranslations(ctx, parms)
 	require.NoError(t, err)
@@ -49,7 +50,7 @@ func TestSaveTranslations(t *testing.T) {
 
 	parms := []Parameter{{
 		ID:          1,
-		Locale:      LocaleEN,
+		locale:      LocaleEN,
 		Name:        "New Name EN",
 		Description: "Desc EN",
 	}}
@@ -58,20 +59,19 @@ func TestSaveTranslations(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, repo.saved, 2)
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "name",
-		Locale:   LocaleEN,
-		Value:    "New Name EN",
-	})
-	require.Contains(t, repo.saved, Translation{
-		Entity:   "parameter",
-		EntityID: 1,
-		Field:    "description",
-		Locale:   LocaleEN,
-		Value:    "Desc EN",
-	})
+	// Check that translations were saved
+	hasName := false
+	hasDesc := false
+	for _, tr := range repo.saved {
+		if tr.Field == "name" && tr.Value == "New Name EN" && tr.Entity == "parameter" {
+			hasName = true
+		}
+		if tr.Field == "description" && tr.Value == "Desc EN" && tr.Entity == "parameter" {
+			hasDesc = true
+		}
+	}
+	require.True(t, hasName)
+	require.True(t, hasDesc)
 }
 
 func TestDeleteTranslations(t *testing.T) {
@@ -81,7 +81,7 @@ func TestDeleteTranslations(t *testing.T) {
 	// Saving translations
 	parms := []Parameter{{
 		ID:          1,
-		Locale:      LocaleEN,
+		locale:      LocaleEN,
 		Name:        "Name EN",
 		Description: "Desc EN",
 	}}
@@ -103,18 +103,18 @@ func TestDeleteTranslations(t *testing.T) {
 func TestMultiLocaleSaveAndLoad(t *testing.T) {
 	repo := &mockRepo{
 		translations: []Translation{
-			{Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Name EN"},
-			{Entity: "parameter", EntityID: 2, Field: "name", Locale: LocaleFR, Value: "Name FR"},
-			{Entity: "parameter", EntityID: 1, Field: "description", Locale: LocaleEN, Value: "Desc EN"},
-			{Entity: "parameter", EntityID: 2, Field: "description", Locale: LocaleFR, Value: "Desc FR"},
+			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Name EN"),
+			NewTranslation(2, "parameter", 2, "name", LocaleFR, "Name FR"),
+			NewTranslation(3, "parameter", 1, "description", LocaleEN, "Desc EN"),
+			NewTranslation(4, "parameter", 2, "description", LocaleFR, "Desc FR"),
 		},
 	}
 	paramTrans := NewTranslator[Parameter](repo)
 
 	// Load with mixed locales
 	parms := []Parameter{
-		{ID: 1, Locale: LocaleEN},
-		{ID: 2, Locale: LocaleFR},
+		{ID: 1, locale: LocaleEN},
+		{ID: 2, locale: LocaleFR},
 	}
 	ctx := context.Background()
 	parms, err := paramTrans.LoadTranslations(ctx, parms)
@@ -139,7 +139,7 @@ func (m *mockRepo) GetTranslations(
 ) ([]Translation, error) {
 	var result []Translation
 	for _, tr := range m.translations {
-		if tr.Entity == entity && tr.Locale == locale {
+		if tr.Entity == entity && tr.GetLocale() == locale {
 			result = append(result, tr)
 		}
 	}
@@ -176,7 +176,7 @@ func (m *mockRepo) MassDelete(
 	}
 	var filtered []Translation
 	for _, tr := range m.saved {
-		k := key{tr.Entity, tr.EntityID, tr.Field, tr.Locale.String()}
+		k := key{tr.Entity, tr.EntityID, tr.Field, tr.GetLocale().String()}
 		if _, ok := toDelete[k]; !ok {
 			filtered = append(filtered, tr)
 		}

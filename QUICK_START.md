@@ -5,13 +5,13 @@
 ```go
 type Product struct {
     ID          int
-    Locale      gotrans.Locale  // Required
+    locale      gotrans.Locale  // Private field
     Title       string          // Translatable
     Description string          // Translatable
 }
 
 func (p Product) TranslationLocale() gotrans.Locale {
-    return p.Locale
+    return p.locale
 }
 
 func (p Product) TranslationEntityID() int {
@@ -23,6 +23,10 @@ func (p Product) TranslatableFields() map[string]string {
         "Title":       "title",
         "Description": "description",
     }
+}
+
+func (p Product) TranslationEntityName() string {
+    return "product"  // Explicit entity name
 }
 ```
 
@@ -37,7 +41,7 @@ translator := gotrans.NewTranslator[Product](repo)
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh"},
 }
 err := translator.SaveTranslations(ctx, products)
 ```
@@ -46,10 +50,10 @@ err := translator.SaveTranslations(ctx, products)
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN},
+    {ID: 1, locale: gotrans.LocaleEN},
 }
-products, err := translator.LoadTranslations(ctx, products)
-fmt.Println(products[0].Title) // "Apple"
+loaded, _ := translator.LoadTranslations(ctx, products)
+fmt.Println(loaded[0].Title) // "Apple"
 ```
 
 ## Delete
@@ -66,10 +70,10 @@ translator.DeleteTranslationsByEntity(ctx, "product", []int{1})
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple"},
-    {ID: 1, Locale: gotrans.LocaleFR, Title: "Pomme"},
-    {ID: 2, Locale: gotrans.LocaleEN, Title: "Banana"},
-    {ID: 2, Locale: gotrans.LocaleFR, Title: "Banane"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple"},
+    {ID: 1, locale: gotrans.LocaleFR, Title: "Pomme"},
+    {ID: 2, locale: gotrans.LocaleEN, Title: "Banana"},
+    {ID: 2, locale: gotrans.LocaleFR, Title: "Banane"},
 }
 // Makes 2 DB calls (grouped by locale), not 4
 translator.SaveTranslations(ctx, products)
@@ -84,6 +88,8 @@ go run ./example/main.go
 ## Run Tests
 
 ```bash
+go test -v ./...
+```
 go test -v ./...
 ```
 

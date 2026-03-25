@@ -5,6 +5,7 @@ Lightweight, framework-agnostic translation module for Go applications. Manage m
 ## Key Features
 
 - **Embedded Locale**: Each entity carries its own locale information
+- **Explicit Entity Naming**: Define entity names explicitly via interface method (with optional reflection fallback)
 - **Automatic Optimization**: Translations grouped by locale for efficient batch operations
 - **Type Safe**: Uses Go generics for compile-time type checking
 - **Explicit Field Mapping**: Clear association between struct fields and translation field IDs
@@ -25,14 +26,14 @@ go get github.com/ivan-gorbushko/gotrans
 ```go
 type Product struct {
     ID          int
-    Locale      gotrans.Locale  // Required: entity's language
-    Title       string          // Translatable field
-    Description string          // Translatable field
+    locale      gotrans.Locale  // Private field, accessed via method
+    Title       string
+    Description string
 }
 
 // Implement Translatable interface
 func (p Product) TranslationLocale() gotrans.Locale {
-    return p.Locale
+    return p.locale
 }
 
 func (p Product) TranslationEntityID() int {
@@ -44,6 +45,10 @@ func (p Product) TranslatableFields() map[string]string {
         "Title":       "title",
         "Description": "description",
     }
+}
+
+func (p Product) TranslationEntityName() string {
+    return "product"  // Explicit entity name used in database
 }
 ```
 
@@ -65,8 +70,8 @@ translator := gotrans.NewTranslator[Product](repo)
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh fruit"},
-    {ID: 2, Locale: gotrans.LocaleEN, Title: "Banana", Description: "Yellow fruit"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple", Description: "Fresh fruit"},
+    {ID: 2, locale: gotrans.LocaleEN, Title: "Banana", Description: "Yellow fruit"},
 }
 err := translator.SaveTranslations(ctx, products)
 ```
@@ -75,8 +80,8 @@ err := translator.SaveTranslations(ctx, products)
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN},
-    {ID: 2, Locale: gotrans.LocaleEN},
+    {ID: 1, locale: gotrans.LocaleEN},
+    {ID: 2, locale: gotrans.LocaleEN},
 }
 products, err := translator.LoadTranslations(ctx, products)
 fmt.Printf("Product 1: %s - %s\n", products[0].Title, products[0].Description)
@@ -98,7 +103,7 @@ err := translator.DeleteTranslationsByEntity(ctx, "product", []int{1, 2})
 
 ### Translatable Interface
 
-Every translatable entity must implement three methods:
+Every translatable entity must implement four methods:
 
 ```go
 type Translatable interface {
@@ -112,6 +117,10 @@ type Translatable interface {
     // Key: struct field name (e.g., "Title")
     // Value: database field ID (e.g., "title")
     TranslatableFields() map[string]string
+    
+    // TranslationEntityName returns the entity name as stored in database
+    // Example: "product", "geo_tag", "order_item"
+    TranslationEntityName() string
 }
 ```
 
@@ -126,6 +135,42 @@ func (p Product) TranslatableFields() map[string]string {
     }
 }
 ```
+
+### Entity Name Resolution
+
+You have full control over entity naming via `TranslationEntityName()` method. This separates your Go code naming from database naming:
+
+```go
+type Product struct { ... }
+func (p Product) TranslationEntityName() string { return "product" }
+
+type GeoTag struct { ... }
+func (g GeoTag) TranslationEntityName() string { return "geo_tag" }
+
+type OrderItem struct { ... }
+func (o OrderItem) TranslationEntityName() string { return "order_item" }
+```
+
+**Reflection Helper (Optional)**
+
+If you want automatic snake_case conversion from struct names, use the provided helpers:
+
+```go
+// Instead of manual implementation:
+func (p Product) TranslationEntityName() string {
+    return "product"
+}
+
+// You can use the reflection helper:
+func (p Product) TranslationEntityName() string {
+    return gotrans.GetEntityNameFromType(&p)
+    // Returns "product" (auto-converted from "Product")
+}
+```
+
+Available helpers:
+- `GetEntityNameFromType[T any](t *T) string` - For pointer types
+- `GetEntityNameFromValue(v any) string` - For any value
 
 ### Translator Interface
 
@@ -153,10 +198,10 @@ When you work with multiple locales, the translator automatically groups transla
 
 ```go
 products := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple"},
-    {ID: 1, Locale: gotrans.LocaleFR, Title: "Pomme"},
-    {ID: 2, Locale: gotrans.LocaleEN, Title: "Banana"},
-    {ID: 2, Locale: gotrans.LocaleFR, Title: "Banane"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple"},
+    {ID: 1, locale: gotrans.LocaleFR, Title: "Pomme"},
+    {ID: 2, locale: gotrans.LocaleEN, Title: "Banana"},
+    {ID: 2, locale: gotrans.LocaleFR, Title: "Banane"},
 }
 
 // Automatically makes 2 DB calls (grouped by locale)
@@ -190,26 +235,13 @@ COLLATE = utf8mb4_unicode_ci;
 ```
 
 **Fields:**
-- `entity`: Entity type name (auto-converted to snake_case from struct name)
+- `entity`: Entity type name (as returned by TranslationEntityName())
 - `entity_id`: Entity's primary key
 - `field`: Translatable field ID (from your mapping)
 - `locale`: ISO-639-1 language code
 - `value`: Translated text
 
 **Unique Constraint**: Ensures no duplicate translations for the same entity, field, and locale.
-
-## Entity Name Resolution
-
-Entity names are automatically converted from struct names to snake_case:
-
-```
-Product          → product
-ProductCategory  → product_category
-OrderItem        → order_item
-AIRecommendation → ai_recommendation
-```
-
-This conversion is automatic and handled internally.
 
 ## Supported Locales
 
@@ -245,15 +277,15 @@ Handle multiple languages in a single operation:
 ```go
 // Load English version
 productsEN := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN},
-    {ID: 2, Locale: gotrans.LocaleEN},
+    {ID: 1, locale: gotrans.LocaleEN},
+    {ID: 2, locale: gotrans.LocaleEN},
 }
 productsEN, _ = translator.LoadTranslations(ctx, productsEN)
 
 // Load French version
 productsFR := []Product{
-    {ID: 1, Locale: gotrans.LocaleFR},
-    {ID: 2, Locale: gotrans.LocaleFR},
+    {ID: 1, locale: gotrans.LocaleFR},
+    {ID: 2, locale: gotrans.LocaleFR},
 }
 productsFR, _ = translator.LoadTranslations(ctx, productsFR)
 ```
@@ -262,9 +294,9 @@ Or load mixed locales in one call:
 
 ```go
 mixed := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN},
-    {ID: 1, Locale: gotrans.LocaleFR},
-    {ID: 2, Locale: gotrans.LocaleEN},
+    {ID: 1, locale: gotrans.LocaleEN},
+    {ID: 1, locale: gotrans.LocaleFR},
+    {ID: 2, locale: gotrans.LocaleEN},
 }
 mixed, _ := translator.LoadTranslations(ctx, mixed)
 // Automatically optimized: 2 queries instead of 3
@@ -305,41 +337,48 @@ All tests pass including:
 ```go
 type Product struct {
     ID          int
-    Locale      gotrans.Locale
+    locale      gotrans.Locale
     Name        string
     Description string
     Details     string
 }
+
+func (p Product) TranslationEntityName() string { return "product" }
 ```
 
 ### CMS/Blog Systems
 ```go
 type Article struct {
     ID       int
-    Locale   gotrans.Locale
+    locale   gotrans.Locale
     Title    string
     Content  string
     Excerpt  string
 }
+
+func (a Article) TranslationEntityName() string { return "article" }
 ```
 
 ### SaaS Applications
 ```go
 type Feature struct {
     ID          int
-    Locale      gotrans.Locale
+    locale      gotrans.Locale
     Name        string
     Description string
 }
+
+func (f Feature) TranslationEntityName() string { return "feature" }
 ```
 
 ## Best Practices
 
-1. **Always Set Locale** - Ensure every entity has the correct locale before save/load operations
-2. **Use Field Mapping Consistently** - Keep mapping aligned between struct fields and database
-3. **Leverage Batch Operations** - Pass multiple entities to save/load for better performance
-4. **Handle Missing Translations** - Check if fields are empty after loading
-5. **Use Transactions** - Wrap multiple save operations in database transactions for consistency
+1. **Make Locale Field Private** - Use lowercase for locale field and expose via `TranslationLocale()` method
+2. **Implement TranslationEntityName()** - Return the exact entity name as stored in your database
+3. **Use Field Mapping Consistently** - Keep mapping aligned between struct fields and database
+4. **Leverage Batch Operations** - Pass multiple entities to save/load for better performance
+5. **Handle Missing Translations** - Check if fields are empty after loading
+6. **Use Transactions** - Wrap multiple save operations in database transactions for consistency
 
 ## Implementation Details
 
@@ -348,6 +387,7 @@ type Feature struct {
 The library uses reflection only where necessary:
 - During `SaveTranslations()`: To extract string field values
 - During `LoadTranslations()`: To apply fetched translations to struct fields
+- In `GetEntityNameFromType()` helper: Optional reflection-based entity name
 
 This is acceptable because:
 - These operations are not in hot loops (typically called per request/batch)

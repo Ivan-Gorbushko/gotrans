@@ -31,8 +31,8 @@ categoryTrans := gotrans.NewTranslator[Category](repo)
 
 ```go
 entities := []Product{
-    {ID: 1, Locale: gotrans.LocaleEN, Title: "Apple"},
-    {ID: 2, Locale: gotrans.LocaleFR, Title: "Pomme"},
+    {ID: 1, locale: gotrans.LocaleEN, Title: "Apple"},
+    {ID: 2, locale: gotrans.LocaleFR, Title: "Pomme"},
 }
 translator.SaveTranslations(ctx, entities)
 ```
@@ -44,7 +44,7 @@ The library automatically optimizes this.
 **A:** Yes:
 
 ```go
-product.Locale = gotrans.LocaleFR
+product.locale = gotrans.LocaleFR  // Note: private field, set via struct initialization
 products, _ := translator.LoadTranslations(ctx, []Product{product})
 ```
 
@@ -153,12 +153,13 @@ See `gotrans_test.go` for examples.
 
 ### Issue: "does not satisfy Translatable"
 
-**Solution**: Implement all three methods:
+**Solution**: Implement all required methods:
 
 ```go
-func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationLocale() gotrans.Locale { return p.locale }
 func (p Product) TranslationEntityID() int { return p.ID }
 func (p Product) TranslatableFields() map[string]string { /* ... */ }
+func (p Product) TranslationEntityName() string { return "product" }
 ```
 
 ### Issue: Translations not loading
@@ -167,9 +168,10 @@ func (p Product) TranslatableFields() map[string]string { /* ... */ }
 1. Is `TranslatableFields()` mapping correct?
 2. Is entity locale set before load?
 3. Do translations exist in the database?
+4. Does `TranslationEntityName()` match the database entity name?
 
 ```go
-product := Product{ID: 1, Locale: gotrans.LocaleEN}
+product := Product{ID: 1, locale: gotrans.LocaleEN}
 products, _ := translator.LoadTranslations(ctx, []Product{product})
 ```
 
@@ -214,7 +216,7 @@ If you're integrating this library into an existing system:
 ```go
 type MyEntity struct {
     ID     int
-    Locale gotrans.Locale  // ← Add this
+    locale gotrans.Locale  // ← Add this (private field)
     // ... other fields
 }
 ```
@@ -222,7 +224,7 @@ type MyEntity struct {
 ### Step 2: Implement Interface
 
 ```go
-func (m MyEntity) TranslationLocale() gotrans.Locale { return m.Locale }
+func (m MyEntity) TranslationLocale() gotrans.Locale { return m.locale }
 func (m MyEntity) TranslationEntityID() int { return m.ID }
 func (m MyEntity) TranslatableFields() map[string]string {
     return map[string]string{
@@ -230,6 +232,7 @@ func (m MyEntity) TranslatableFields() map[string]string {
         "Field2": "field_2",
     }
 }
+func (m MyEntity) TranslationEntityName() string { return "my_entity" }
 ```
 
 ### Step 3: Create Translator
@@ -243,11 +246,11 @@ translator := gotrans.NewTranslator[MyEntity](repo)
 
 ```go
 // Save
-entity.Locale = gotrans.LocaleEN
+entity := MyEntity{ID: 1, locale: gotrans.LocaleEN}
 translator.SaveTranslations(ctx, []MyEntity{entity})
 
 // Load
-entity = MyEntity{ID: 1, Locale: gotrans.LocaleEN}
+entity = MyEntity{ID: 1, locale: gotrans.LocaleEN}
 entities, _ := translator.LoadTranslations(ctx, []MyEntity{entity})
 
 // Delete
