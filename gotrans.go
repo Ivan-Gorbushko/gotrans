@@ -10,20 +10,26 @@ import (
 // Example: map[string]string{"Title": "title", "Description": "desc", "Recommendation": "rec"}
 // TranslationEntityName returns the name of the entity as stored in translations table
 type Translatable interface {
-	TranslationLocale() Locale
 	TranslationEntityID() int
-	TranslatableFields() map[string]string
 	TranslationEntityName() string
+	TranslationEntityLocale() Locale
+	TranslatableFields() map[string]string
 }
 
 // Translator interface for single-locale translation operations
-// All translation operations now work with locale from entity (via TranslationLocale() method)
+// All translation operations now work with locale from entity (via TranslationEntityLocale() method)
 // Example usage: LoadTranslations(ctx, entities)
 type Translator[T Translatable] interface {
 	LoadTranslations(ctx context.Context, entities []T) ([]T, error)
 	SaveTranslations(ctx context.Context, entities []T) error
-	DeleteTranslations(ctx context.Context, locale Locale, entity string, entityIDs []int, fields []string) error
 	DeleteTranslationsByEntity(ctx context.Context, entity string, entityIDs []int) error
+	DeleteTranslations(
+		ctx context.Context,
+		locale Locale,
+		entity string,
+		entityIDs []int,
+		fields []string,
+	) error
 }
 
 var _ Translator[Translatable] = (*translator[Translatable])(nil)
@@ -46,17 +52,17 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 	if len(entities) == 0 {
 		return nil, nil
 	}
-	
+
 	// Get entity name from first entity
 	entityName := entities[0].TranslationEntityName()
 
 	// Group entities by locale for optimized loading
 	localeMap := make(map[Locale][]int)
 	for _, e := range entities {
-		locale := e.TranslationLocale()
+		locale := e.TranslationEntityLocale()
 		localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
 	}
-	
+
 	// Load translations for each locale group
 	var allTranslations []Translation
 	for locale, entityIDs := range localeMap {
@@ -66,7 +72,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 		}
 		allTranslations = append(allTranslations, translations...)
 	}
-	
+
 	// Apply translations to entities
 	for i := range entities {
 		err := t.applyTranslations(&entities[i], allTranslations)
@@ -74,7 +80,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 			return nil, err
 		}
 	}
-	
+
 	return entities, nil
 }
 
@@ -82,21 +88,21 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 	if len(entities) == 0 {
 		return nil
 	}
-	
+
 	// Get entity name from first entity
 	entityName := entities[0].TranslationEntityName()
-	
+
 	// Group translations by locale for batch save
 	localeMap := make(map[Locale][]Translation)
 	for _, e := range entities {
-		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, e.TranslationLocale())
+		translations, err := extractTranslations(entityName, e.TranslationEntityID(), e, e.TranslationEntityLocale())
 		if err != nil {
 			return err
 		}
-		locale := e.TranslationLocale()
+		locale := e.TranslationEntityLocale()
 		localeMap[locale] = append(localeMap[locale], translations...)
 	}
-	
+
 	// Save grouped translations for each locale
 	for locale, translations := range localeMap {
 		if len(translations) == 0 {
@@ -106,7 +112,7 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -136,7 +142,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	}
 	id := translatable.TranslationEntityID()
 	for _, tr := range translations {
-		if tr.Entity != entityName || tr.EntityID != id || tr.GetLocale() != translatable.TranslationLocale() {
+		if tr.Entity != entityName || tr.EntityID != id || tr.GetLocale() != translatable.TranslationEntityLocale() {
 			continue
 		}
 		idx, ok := idToIndex[tr.Field]
@@ -177,7 +183,6 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 	}
 	return results, nil
 }
-
 
 /**
  * Converts a string from CamelCase to snake_case with next rules:

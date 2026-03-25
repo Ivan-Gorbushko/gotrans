@@ -16,8 +16,8 @@ type Parameter struct {
 
 var _ Translatable = (*Parameter)(nil)
 
-func (p Parameter) TranslationLocale() Locale   { return p.locale }
-func (p Parameter) TranslationEntityID() int    { return p.ID }
+func (p Parameter) TranslationEntityLocale() Locale { return p.locale }
+func (p Parameter) TranslationEntityID() int        { return p.ID }
 func (p Parameter) TranslatableFields() map[string]string {
 	return map[string]string{
 		"Name":        "name",

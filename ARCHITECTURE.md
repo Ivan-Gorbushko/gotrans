@@ -8,7 +8,7 @@
 
 ### 1. Embedded Locale
 
-Each entity carries its own locale information via the `TranslationLocale()` method. This means:
+Each entity carries its own locale information via the `TranslationEntityLocale()` method. This means:
 
 ```go
 type Product struct {
@@ -17,7 +17,7 @@ type Product struct {
     Title  string
 }
 
-func (p Product) TranslationLocale() gotrans.Locale {
+func (p Product) TranslationEntityLocale() gotrans.Locale {
     return p.locale
 }
 ```
@@ -99,7 +99,7 @@ func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) erro
     // Step 2: Group translations by locale
     localeMap := make(map[Locale][]Translation)
     for _, e := range entities {
-        locale := e.TranslationLocale()
+        locale := e.TranslationEntityLocale()
         translations := extractTranslations(entityName, e.TranslationEntityID(), e, locale)
         localeMap[locale] = append(localeMap[locale], translations...)
     }
@@ -127,7 +127,7 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
     // Step 2: Group entities by locale
     localeMap := make(map[Locale][]int)
     for _, e := range entities {
-        locale := e.TranslationLocale()
+        locale := e.TranslationEntityLocale()
         localeMap[locale] = append(localeMap[locale], e.TranslationEntityID())
     }
     
@@ -261,7 +261,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
     
     // For each translation matching this entity
     for _, tr := range translations {
-        if tr.Entity == entityName && tr.GetLocale() == translatable.TranslationLocale() {
+        if tr.Entity == entityName && tr.GetLocale() == translatable.TranslationEntityLocale() {
             if idx, ok := idToIndex[tr.Field]; ok {
                 field := v.Field(idx)
                 if field.Kind() == reflect.String && field.CanSet() {

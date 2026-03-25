@@ -10,7 +10,7 @@ type Product struct {
     Description string          // Translatable
 }
 
-func (p Product) TranslationLocale() gotrans.Locale {
+func (p Product) TranslationEntityLocale() gotrans.Locale {
     return p.locale
 }
 

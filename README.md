@@ -32,7 +32,7 @@ type Product struct {
 }
 
 // Implement Translatable interface
-func (p Product) TranslationLocale() gotrans.Locale {
+func (p Product) TranslationEntityLocale() gotrans.Locale {
     return p.locale
 }
 
@@ -107,8 +107,8 @@ Every translatable entity must implement four methods:
 
 ```go
 type Translatable interface {
-    // TranslationLocale returns the language for this entity
-    TranslationLocale() gotrans.Locale
+    // TranslationEntityLocale returns the language for this entity
+    TranslationEntityLocale() gotrans.Locale
     
     // TranslationEntityID returns the unique identifier
     TranslationEntityID() int
@@ -373,7 +373,7 @@ func (f Feature) TranslationEntityName() string { return "feature" }
 
 ## Best Practices
 
-1. **Make Locale Field Private** - Use lowercase for locale field and expose via `TranslationLocale()` method
+1. **Make Locale Field Private** - Use lowercase for locale field and expose via `TranslationEntityLocale()` method
 2. **Implement TranslationEntityName()** - Return the exact entity name as stored in your database
 3. **Use Field Mapping Consistently** - Keep mapping aligned between struct fields and database
 4. **Leverage Batch Operations** - Pass multiple entities to save/load for better performance

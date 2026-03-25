@@ -20,8 +20,8 @@ type Product struct {
 }
 
 // Implement Translatable interface
-func (p Product) TranslationLocale() gotrans.Locale { return p.locale }
-func (p Product) TranslationEntityID() int          { return p.ID }
+func (p Product) TranslationEntityLocale() gotrans.Locale { return p.locale }
+func (p Product) TranslationEntityID() int                { return p.ID }
 func (p Product) TranslatableFields() map[string]string {
 	return map[string]string{
 		"Title":       "title",
@@ -32,7 +32,7 @@ func (p Product) TranslationEntityName() string { return "product" }
 
 func main() {
 	ctx := context.Background()
-	
+
 	// Open in-memory SQLite DB
 	db, err := sqlx.Open("sqlite3", ":memory:")
 	if err != nil {
@@ -116,7 +116,7 @@ func main() {
 	// Example 5: Delete translations for specific locale
 	fmt.Println("\n=== Example 5: Delete English Translations ===")
 	_ = translator.DeleteTranslations(ctx, gotrans.LocaleEN, "product", []int{1}, []string{"title", "description"})
-	
+
 	fmt.Println("Remaining translations:")
 	rows, _ = db.Queryx("SELECT entity, entity_id, field, locale, value FROM translations ORDER BY locale, entity_id")
 	count := 0
@@ -135,7 +135,7 @@ func main() {
 	// Example 6: Delete all translations for entity
 	fmt.Println("\n=== Example 6: Delete All Translations for Entities ===")
 	_ = translator.DeleteTranslationsByEntity(ctx, "product", []int{1, 2})
-	
+
 	fmt.Println("After delete all:")
 	rows, _ = db.Queryx("SELECT COUNT(*) FROM translations")
 	var count64 int64
@@ -144,4 +144,3 @@ func main() {
 		fmt.Printf("  Total translations: %d\n", count64)
 	}
 }
-

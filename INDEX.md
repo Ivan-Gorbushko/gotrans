@@ -94,7 +94,7 @@ go run ./example/main.go
 
 ## Key Concepts
 
-- **Embedded Locale**: Entity carries locale via `TranslationLocale()`
+- **Embedded Locale**: Entity carries locale via `TranslationEntityLocale()`
 - **Field Mapping**: Struct fields map to DB fields via `TranslatableFields()`
 - **Automatic Grouping**: Translations grouped by locale for optimization
 - **Type Safe**: Go generics ensure compile-time checking
@@ -131,7 +131,7 @@ type Product struct {
 }
 
 // Implement interface
-func (p Product) TranslationLocale() gotrans.Locale { return p.Locale }
+func (p Product) TranslationEntityLocale() gotrans.Locale { return p.Locale }
 func (p Product) TranslationEntityID() int { return p.ID }
 func (p Product) TranslatableFields() map[string]string {
     return map[string]string{"Title": "title"}

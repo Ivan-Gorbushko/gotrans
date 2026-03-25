@@ -156,7 +156,7 @@ See `gotrans_test.go` for examples.
 **Solution**: Implement all required methods:
 
 ```go
-func (p Product) TranslationLocale() gotrans.Locale { return p.locale }
+func (p Product) TranslationEntityLocale() gotrans.Locale { return p.locale }
 func (p Product) TranslationEntityID() int { return p.ID }
 func (p Product) TranslatableFields() map[string]string { /* ... */ }
 func (p Product) TranslationEntityName() string { return "product" }
@@ -224,7 +224,7 @@ type MyEntity struct {
 ### Step 2: Implement Interface
 
 ```go
-func (m MyEntity) TranslationLocale() gotrans.Locale { return m.locale }
+func (m MyEntity) TranslationEntityLocale() gotrans.Locale { return m.locale }
 func (m MyEntity) TranslationEntityID() int { return m.ID }
 func (m MyEntity) TranslatableFields() map[string]string {
     return map[string]string{
