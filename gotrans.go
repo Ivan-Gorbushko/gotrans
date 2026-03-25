@@ -142,7 +142,7 @@ func (t *translator[T]) applyTranslations(entity *T, translations []Translation)
 	}
 	id := translatable.TranslationEntityID()
 	for _, tr := range translations {
-		if tr.Entity != entityName || tr.EntityID != id || tr.GetLocale() != translatable.TranslationEntityLocale() {
+		if tr.Entity != entityName || tr.EntityID != id || tr.Locale != translatable.TranslationEntityLocale() {
 			continue
 		}
 		idx, ok := idToIndex[tr.Field]
@@ -178,7 +178,13 @@ func extractTranslations(entityName string, entityID int, entity any, locale Loc
 		}
 		f := v.Field(i)
 		if f.Kind() == reflect.String {
-			results = append(results, NewTranslation(0, entityName, entityID, fieldID, locale, f.String()))
+			results = append(results, Translation{
+				Entity:   entityName,
+				EntityID: entityID,
+				Field:    fieldID,
+				Locale:   locale,
+				Value:    f.String(),
+			})
 		}
 	}
 	return results, nil

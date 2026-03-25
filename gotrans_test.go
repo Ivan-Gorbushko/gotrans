@@ -29,8 +29,8 @@ func (p Parameter) TranslationEntityName() string { return "parameter" }
 func TestLoadTranslations(t *testing.T) {
 	repo := &mockRepo{
 		translations: []Translation{
-			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Example Name EN"),
-			NewTranslation(2, "parameter", 1, "description", LocaleEN, "Desc EN"),
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Example Name EN"},
+			{ID: 2, Entity: "parameter", EntityID: 1, Field: "description", Locale: LocaleEN, Value: "Desc EN"},
 		},
 	}
 	paramTrans := NewTranslator[Parameter](repo)
@@ -103,10 +103,10 @@ func TestDeleteTranslations(t *testing.T) {
 func TestMultiLocaleSaveAndLoad(t *testing.T) {
 	repo := &mockRepo{
 		translations: []Translation{
-			NewTranslation(1, "parameter", 1, "name", LocaleEN, "Name EN"),
-			NewTranslation(2, "parameter", 2, "name", LocaleFR, "Name FR"),
-			NewTranslation(3, "parameter", 1, "description", LocaleEN, "Desc EN"),
-			NewTranslation(4, "parameter", 2, "description", LocaleFR, "Desc FR"),
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Name EN"},
+			{ID: 2, Entity: "parameter", EntityID: 2, Field: "name", Locale: LocaleFR, Value: "Name FR"},
+			{ID: 3, Entity: "parameter", EntityID: 1, Field: "description", Locale: LocaleEN, Value: "Desc EN"},
+			{ID: 4, Entity: "parameter", EntityID: 2, Field: "description", Locale: LocaleFR, Value: "Desc FR"},
 		},
 	}
 	paramTrans := NewTranslator[Parameter](repo)
@@ -143,7 +143,7 @@ func (m *mockRepo) GetTranslations(
 	}
 	var result []Translation
 	for _, tr := range m.translations {
-		if tr.Entity != entity || tr.GetLocale() != locale {
+		if tr.Entity != entity || tr.Locale != locale {
 			continue
 		}
 		if _, ok := idSet[tr.EntityID]; ok {
@@ -168,7 +168,6 @@ func (m *mockRepo) MassDelete(
 	entityIDs []int,
 	fields []string,
 ) error {
-	// Delete translations by key
 	type key struct {
 		Entity   string
 		EntityID int
@@ -183,7 +182,7 @@ func (m *mockRepo) MassDelete(
 	}
 	var filtered []Translation
 	for _, tr := range m.saved {
-		k := key{tr.Entity, tr.EntityID, tr.Field, tr.GetLocale().String()}
+		k := key{tr.Entity, tr.EntityID, tr.Field, tr.Locale.String()}
 		if _, ok := toDelete[k]; !ok {
 			filtered = append(filtered, tr)
 		}

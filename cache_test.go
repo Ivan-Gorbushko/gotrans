@@ -16,7 +16,7 @@ func (r *countingRepo) GetTranslations(ctx context.Context, locale Locale, entit
 func TestInMemoryCache_SetGet(t *testing.T) {
 	c := NewInMemoryCache()
 	key := "en:product:1"
-	value := []Translation{NewTranslation(1, "product", 1, "title", LocaleEN, "Apple")}
+	value := []Translation{{ID: 1, Entity: "product", EntityID: 1, Field: "title", Locale: LocaleEN, Value: "Apple"}}
 	_, ok := c.Get(key)
 	require.False(t, ok)
 	c.Set(key, value, 0)
@@ -56,7 +56,7 @@ func TestInMemoryCache_Clear(t *testing.T) {
 }
 func TestCachedRepository_CacheHit(t *testing.T) {
 	base := &countingRepo{mockRepo: mockRepo{
-		translations: []Translation{NewTranslation(1, "parameter", 1, "name", LocaleEN, "Hello")},
+		translations: []Translation{{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Hello"}},
 	}}
 	repo := NewCachedRepositoryInMemory(base, CacheOptions{TTL: time.Minute})
 	ctx := context.Background()
@@ -72,8 +72,8 @@ func TestCachedRepository_CacheHit(t *testing.T) {
 func TestCachedRepository_PartialCacheHit(t *testing.T) {
 	base := &countingRepo{mockRepo: mockRepo{
 		translations: []Translation{
-			NewTranslation(1, "parameter", 1, "name", LocaleEN, "One"),
-			NewTranslation(2, "parameter", 2, "name", LocaleEN, "Two"),
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "One"},
+			{ID: 2, Entity: "parameter", EntityID: 2, Field: "name", Locale: LocaleEN, Value: "Two"},
 		},
 	}}
 	repo := NewCachedRepositoryInMemory(base, CacheOptions{TTL: time.Minute})
@@ -87,13 +87,13 @@ func TestCachedRepository_PartialCacheHit(t *testing.T) {
 }
 func TestCachedRepository_InvalidationOnUpdate(t *testing.T) {
 	base := &countingRepo{mockRepo: mockRepo{
-		translations: []Translation{NewTranslation(1, "parameter", 1, "name", LocaleEN, "Old")},
+		translations: []Translation{{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Old"}},
 	}}
 	repo := NewCachedRepositoryInMemory(base, CacheOptions{TTL: time.Minute})
 	ctx := context.Background()
 	_, _ = repo.GetTranslations(ctx, LocaleEN, "parameter", []int{1})
 	require.Equal(t, 1, base.getCalls)
-	updated := []Translation{NewTranslation(1, "parameter", 1, "name", LocaleEN, "New")}
+	updated := []Translation{{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "New"}}
 	base.mockRepo.translations = updated
 	_ = repo.MassCreateOrUpdate(ctx, LocaleEN, updated)
 	res, err := repo.GetTranslations(ctx, LocaleEN, "parameter", []int{1})
@@ -103,7 +103,7 @@ func TestCachedRepository_InvalidationOnUpdate(t *testing.T) {
 }
 func TestCachedRepository_InvalidationOnDelete(t *testing.T) {
 	base := &countingRepo{mockRepo: mockRepo{
-		translations: []Translation{NewTranslation(1, "parameter", 1, "name", LocaleEN, "Hello")},
+		translations: []Translation{{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Hello"}},
 	}}
 	repo := NewCachedRepositoryInMemory(base, CacheOptions{TTL: time.Minute})
 	ctx := context.Background()
@@ -119,8 +119,8 @@ func TestCachedRepository_InvalidationOnDelete(t *testing.T) {
 func TestCachedRepository_InvalidationAllLocales(t *testing.T) {
 	base := &countingRepo{mockRepo: mockRepo{
 		translations: []Translation{
-			NewTranslation(1, "parameter", 1, "name", LocaleEN, "EN"),
-			NewTranslation(2, "parameter", 1, "name", LocaleFR, "FR"),
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "EN"},
+			{ID: 2, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleFR, Value: "FR"},
 		},
 	}}
 	repo := NewCachedRepositoryInMemory(base, CacheOptions{TTL: time.Minute})

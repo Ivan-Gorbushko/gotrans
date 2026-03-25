@@ -73,7 +73,8 @@ func main() {
 	if err = translator.SaveTranslations(ctx, products); err != nil {
 		log.Fatalf("failed to seed: %v", err)
 	}
-	fmt.Println("Seeded translations for EN and FR.\n")
+	fmt.Println("Seeded translations for EN and FR.")
+	fmt.Println()
 
 	// --- Example 1: First load — cache miss, goes to DB ---
 	fmt.Println("=== Example 1: First Load (cache miss → DB) ===")

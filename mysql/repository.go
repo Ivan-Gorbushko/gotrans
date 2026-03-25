@@ -185,7 +185,7 @@ func toMysqlTranslateModel(tr gotrans.Translation) Translation {
 		Entity:   tr.Entity,
 		EntityID: tr.EntityID,
 		Field:    tr.Field,
-		Locale:   tr.GetLocale().String(),
+		Locale:   tr.Locale.String(),
 		Value:    tr.Value,
 	}
 }
@@ -195,6 +195,12 @@ func toTranslateModel(mt Translation) gotrans.Translation {
 	if !ok {
 		locale = gotrans.LocaleNone
 	}
-
-	return gotrans.NewTranslation(mt.ID, mt.Entity, mt.EntityID, mt.Field, locale, mt.Value)
+	return gotrans.Translation{
+		ID:       mt.ID,
+		Entity:   mt.Entity,
+		EntityID: mt.EntityID,
+		Field:    mt.Field,
+		Locale:   locale,
+		Value:    mt.Value,
+	}
 }

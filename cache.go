@@ -232,7 +232,7 @@ func (c *cachedRepository) invalidateByTranslations(translations []Translation) 
 	seen := make(map[string]struct{}, len(translations))
 	keys := make([]string, 0, len(translations))
 	for _, tr := range translations {
-		k := translationCacheKey(tr.GetLocale(), tr.Entity, tr.EntityID)
+		k := translationCacheKey(tr.Locale, tr.Entity, tr.EntityID)
 		if _, dup := seen[k]; !dup {
 			seen[k] = struct{}{}
 			keys = append(keys, k)
@@ -243,7 +243,7 @@ func (c *cachedRepository) invalidateByTranslations(translations []Translation) 
 	for _, tr := range translations {
 		eKey := entityIndexKey(tr.Entity, tr.EntityID)
 		if keyset, ok := c.entityIndex[eKey]; ok {
-			delete(keyset, translationCacheKey(tr.GetLocale(), tr.Entity, tr.EntityID))
+			delete(keyset, translationCacheKey(tr.Locale, tr.Entity, tr.EntityID))
 		}
 	}
 	c.idxMu.Unlock()
@@ -299,4 +299,3 @@ func translationCacheKey(locale Locale, entity string, entityID int) string {
 func entityIndexKey(entity string, entityID int) string {
 	return fmt.Sprintf("%s:%d", entity, entityID)
 }
-
