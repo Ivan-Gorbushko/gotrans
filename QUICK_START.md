@@ -79,17 +79,47 @@ products := []Product{
 translator.SaveTranslations(ctx, products)
 ```
 
-## Run Example
+## Advanced: With Caching and Timeouts
+
+```go
+// Create cache and repository with options
+cache := gotrans.NewInMemoryCache()
+cachedRepo := gotrans.NewCachedRepository(repo, cache, gotrans.CacheOptions{
+    TTL:       5 * time.Minute,
+    BatchSize: 500,
+})
+
+// Create translator with automatic timeouts
+translator := gotrans.NewTranslatorWithOptions(gotrans.TranslatorOptions[Product]{
+    Repository:            cachedRepo,
+    DefaultContextTimeout: 30 * time.Second,
+})
+
+// Monitor cache performance
+stats := cache.Stats()
+fmt.Printf("Cache: Hits=%d, Misses=%d\n", stats.Hits, stats.Misses)
+```
+
+## Run Examples
 
 ```bash
-go run ./example/main.go
+go run ./example/basic/main.go              # Basic usage
+go run ./example/caching/main.go            # Cache statistics
+go run ./example/error-handling/main.go     # Context timeouts
+go run ./example/performance/main.go        # Large datasets
+go run ./example/advanced/main.go           # Multi-locale
 ```
 
 ## Run Tests
 
 ```bash
+# Run all tests
 go test -v ./...
-```
-go test -v ./...
+
+# Run stress tests (full suite)
+go test -v -run "TestStress" ./...
+
+# Run with race detector
+go test -v -race ./...
 ```
 

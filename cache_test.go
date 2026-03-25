@@ -12,6 +12,7 @@ type countingRepo struct {
 	mockRepo
 	getCalls int
 }
+
 func (r *countingRepo) GetTranslations(ctx context.Context, locale Locale, entity string, ids []int) ([]Translation, error) {
 	r.getCalls++
 	return r.mockRepo.GetTranslations(ctx, locale, entity, ids)

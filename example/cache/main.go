@@ -178,4 +178,3 @@ func main() {
 	customCache.Clear()
 	fmt.Println("  Cache cleared manually via custom cache handle.")
 }
-

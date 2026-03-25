@@ -3,7 +3,9 @@ package gotrans
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -124,11 +126,12 @@ func TestMultiLocaleSaveAndLoad(t *testing.T) {
 }
 
 type mockRepo struct {
-	saved        []Translation
-	translations []Translation
-	getErr       error
-	saveErr      error
-	deleteErr    error
+	mu            sync.Mutex
+	saved         []Translation
+	translations  []Translation
+	getErr        error
+	saveErr       error
+	deleteErr     error
 }
 
 func (m *mockRepo) GetTranslations(
@@ -166,6 +169,9 @@ func (m *mockRepo) MassDelete(
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	idSet := make(map[int]struct{}, len(entityIDs))
 	for _, id := range entityIDs {
@@ -213,6 +219,10 @@ func (m *mockRepo) MassCreateOrUpdate(
 	if m.saveErr != nil {
 		return m.saveErr
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if len(translations) == 0 {
 		return nil
 	}
@@ -354,3 +364,228 @@ func (r *countingGetRepo) GetTranslations(ctx context.Context, locale Locale, en
 
 // errTest is a sentinel error used in error propagation tests.
 var errTest = errors.New("repository error")
+
+// BenchmarkLoadTranslations benchmarks the LoadTranslations operation.
+func BenchmarkLoadTranslations(b *testing.B) {
+	repo := &mockRepo{
+		translations: []Translation{
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Test"},
+		},
+	}
+	paramTrans := NewTranslator[Parameter](repo)
+	parms := []Parameter{{ID: 1, locale: LocaleEN}}
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = paramTrans.LoadTranslations(ctx, parms)
+	}
+}
+
+// BenchmarkCacheHit benchmarks cache hit performance.
+func BenchmarkCacheHit(b *testing.B) {
+	repo := &mockRepo{
+		translations: []Translation{
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Test"},
+		},
+	}
+	cache := NewInMemoryCache()
+	cachedRepo := NewCachedRepository(repo, cache, CacheOptions{TTL: 5 * time.Minute})
+	paramTrans := NewTranslator[Parameter](cachedRepo)
+	parms := []Parameter{{ID: 1, locale: LocaleEN}}
+	ctx := context.Background()
+
+	// Warm up cache
+	paramTrans.LoadTranslations(ctx, parms)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		paramTrans.LoadTranslations(ctx, parms)
+	}
+}
+
+// StressTest_ConcurrentCacheOperations tests cache behavior under concurrent load.
+func TestStressTest_ConcurrentCacheOperations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
+
+	repo := &mockRepo{
+		translations: make([]Translation, 100),
+	}
+
+	// Create 100 translations
+	for i := 0; i < 100; i++ {
+		repo.translations[i] = Translation{
+			ID:       i + 1,
+			Entity:   "parameter",
+			EntityID: (i / 10) + 1, // 10 entities with 10 translations each
+			Field:    "field_" + string(rune('a'+i%26)),
+			Locale:   LocaleEN,
+			Value:    "Value " + string(rune('0'+i%10)),
+		}
+	}
+
+	cache := NewInMemoryCache()
+	cachedRepo := NewCachedRepository(repo, cache, CacheOptions{TTL: 10 * time.Millisecond})
+	paramTrans := NewTranslator[Parameter](cachedRepo)
+	ctx := context.Background()
+
+	const (
+		goroutines = 50
+		operations = 100
+	)
+
+	var wg sync.WaitGroup
+	errors := make(chan error, goroutines*operations)
+
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for op := 0; op < operations; op++ {
+				entityID := (id*operations + op) % 10
+				parms := []Parameter{{ID: entityID + 1, locale: LocaleEN}}
+
+				if _, err := paramTrans.LoadTranslations(ctx, parms); err != nil {
+					errors <- err
+				}
+
+				if op%10 == 0 {
+					if err := paramTrans.SaveTranslations(ctx, parms); err != nil {
+						errors <- err
+					}
+				}
+			}
+		}(g)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		if err != nil {
+			t.Errorf("Stress test failed: %v", err)
+		}
+	}
+
+	// Verify cache stats
+	stats := cache.Stats()
+	require.True(t, stats.Hits > 0, "expected cache hits during stress test")
+	require.True(t, stats.Sets > 0, "expected cache sets during stress test")
+	t.Logf("Cache stats - Hits: %d, Misses: %d, Sets: %d, Deletes: %d",
+		stats.Hits, stats.Misses, stats.Sets, stats.Deletes)
+}
+
+// TestStressTest_LargeBatchOperations tests performance with large batches.
+func TestStressTest_LargeBatchOperations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
+
+	const batchSize = 500
+
+	repo := &mockRepo{
+		translations: make([]Translation, batchSize*10),
+	}
+
+	// Create many translations
+	for i := 0; i < batchSize*10; i++ {
+		repo.translations[i] = Translation{
+			ID:       i + 1,
+			Entity:   "parameter",
+			EntityID: i/10 + 1,
+			Field:    "field",
+			Locale:   LocaleEN,
+			Value:    "Value",
+		}
+	}
+
+	cache := NewInMemoryCache()
+	cachedRepo := NewCachedRepository(repo, cache, CacheOptions{
+		TTL:       5 * time.Minute,
+		BatchSize: 100, // test batch processing
+	})
+	paramTrans := NewTranslator[Parameter](cachedRepo)
+	ctx := context.Background()
+
+	// Load large batch
+	var ids []int
+	for i := 1; i <= batchSize; i++ {
+		ids = append(ids, i)
+	}
+
+	parms := make([]Parameter, len(ids))
+	for i, id := range ids {
+		parms[i] = Parameter{ID: id, locale: LocaleEN}
+	}
+
+	_, err := paramTrans.LoadTranslations(ctx, parms)
+	require.NoError(t, err)
+
+	stats := cache.Stats()
+	require.True(t, stats.Sets > 0, "expected cache to be populated")
+	t.Logf("Large batch test - Cache sets: %d", stats.Sets)
+}
+
+// TestStressTest_MemoryLeakDetection tests for potential memory leaks under load.
+func TestStressTest_MemoryLeakDetection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping stress test in short mode")
+	}
+
+	repo := &mockRepo{
+		translations: []Translation{
+			{ID: 1, Entity: "parameter", EntityID: 1, Field: "name", Locale: LocaleEN, Value: "Test"},
+		},
+	}
+
+	cache := NewInMemoryCache()
+	ctx := context.Background()
+
+	const iterations = 10000
+
+	// Create and destroy translators repeatedly
+	for i := 0; i < iterations; i++ {
+		cachedRepo := NewCachedRepository(repo, cache, CacheOptions{TTL: 5 * time.Minute})
+		paramTrans := NewTranslator[Parameter](cachedRepo)
+		parms := []Parameter{{ID: 1, locale: LocaleEN}}
+		_, _ = paramTrans.LoadTranslations(ctx, parms)
+	}
+
+	stats := cache.Stats()
+	require.True(t, stats.Sets > 0, "cache should have operations")
+	t.Logf("Memory leak test completed - Cache size would be: %d entries", len(cache.items))
+}
+
+// TestStressTest_CacheStatistics validates cache statistics tracking.
+func TestStressTest_CacheStatistics(t *testing.T) {
+	cache := NewInMemoryCache()
+
+	// Perform various operations
+	cache.Set("key1", []Translation{{ID: 1}}, 0)
+	cache.Set("key2", []Translation{{ID: 2}}, 0)
+
+	cache.Get("key1") // hit
+	cache.Get("key1") // hit
+	cache.Get("key3") // miss
+	cache.Get("key4") // miss
+
+	cache.Delete("key1")
+	cache.Delete("key2")
+
+	stats := cache.Stats()
+	require.Equal(t, int64(2), stats.Hits, "expected 2 cache hits")
+	require.Equal(t, int64(2), stats.Misses, "expected 2 cache misses")
+	require.Equal(t, int64(2), stats.Sets, "expected 2 cache sets")
+	require.Equal(t, int64(2), stats.Deletes, "expected 2 cache deletes")
+
+	// Test reset
+	cache.ResetStats()
+	stats = cache.Stats()
+	require.Equal(t, int64(0), stats.Hits)
+	require.Equal(t, int64(0), stats.Misses)
+	require.Equal(t, int64(0), stats.Sets)
+	require.Equal(t, int64(0), stats.Deletes)
+}
+

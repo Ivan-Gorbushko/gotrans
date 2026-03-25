@@ -2,8 +2,13 @@ package gotrans
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"time"
 )
+
+// ErrEmptyEntityName is returned when an entity name is empty.
+var ErrEmptyEntityName = errors.New("entity name cannot be empty")
 
 // Translatable is the interface every translatable entity must implement.
 // TranslatableFields returns a map: struct field name → translation field ID in DB.
@@ -14,6 +19,17 @@ type Translatable interface {
 	TranslationEntityName() string
 	TranslationEntityLocale() Locale
 	TranslatableFields() map[string]string
+}
+
+// TranslatorOptions provides configuration options for a Translator.
+type TranslatorOptions[T Translatable] struct {
+	// Repository is the translation repository (required).
+	Repository TranslationRepository
+
+	// DefaultContextTimeout specifies a default timeout for translation operations.
+	// If set to a positive value, contexts without a deadline will be wrapped with this timeout.
+	// Zero means no default timeout is applied.
+	DefaultContextTimeout time.Duration
 }
 
 // Translator is the main interface for translation operations.
@@ -31,9 +47,10 @@ type Translator[T Translatable] interface {
 var _ Translator[Translatable] = (*translator[Translatable])(nil)
 
 type translator[T Translatable] struct {
-	repo        TranslationRepository
-	entityName  string          // derived from T once at construction, never changes
-	fieldIndex  map[string]int  // DB field ID → struct field index, pre-built once
+	repo               TranslationRepository
+	entityName         string         // derived from T once at construction, never changes
+	fieldIndex         map[string]int // DB field ID → struct field index, pre-built once
+	defaultCtxTimeout  time.Duration
 }
 
 // NewTranslator creates a translator for entity type T.
@@ -47,9 +64,41 @@ func NewTranslator[T Translatable](repo TranslationRepository) Translator[T] {
 	}
 }
 
+// NewTranslatorWithOptions creates a translator with advanced options including default context timeout.
+// Use this when you want to set a default timeout for operations.
+//
+//	trans := NewTranslatorWithOptions(TranslatorOptions[Product]{
+//		Repository: repo,
+//		DefaultContextTimeout: 30 * time.Second,
+//	})
+func NewTranslatorWithOptions[T Translatable](opts TranslatorOptions[T]) Translator[T] {
+	var zero T
+	return &translator[T]{
+		repo:              opts.Repository,
+		entityName:        zero.TranslationEntityName(),
+		fieldIndex:        buildFieldIndex[T](),
+		defaultCtxTimeout: opts.DefaultContextTimeout,
+	}
+}
+
+// contextWithDefault applies default timeout if context has no deadline.
+func (t *translator[T]) contextWithDefault(ctx context.Context) context.Context {
+	if t.defaultCtxTimeout <= 0 {
+		return ctx
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return ctx // context already has a deadline
+	}
+	newCtx, _ := context.WithTimeout(ctx, t.defaultCtxTimeout)
+	return newCtx
+}
+
 func (t *translator[T]) DeleteTranslationsByEntity(ctx context.Context, entityIDs []int) error {
 	if len(entityIDs) == 0 {
 		return nil
+	}
+	if t.entityName == "" {
+		return ErrEmptyEntityName
 	}
 	return t.repo.MassDelete(ctx, LocaleNone, t.entityName, entityIDs, nil)
 }
@@ -64,6 +113,18 @@ func (t *translator[T]) DeleteTranslations(ctx context.Context, locale Locale, e
 func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T, error) {
 	if len(entities) == 0 {
 		return entities, nil
+	}
+
+	// Apply default context timeout if needed
+	ctx = t.contextWithDefault(ctx)
+
+	// Check if context is already done
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if t.entityName == "" {
+		return nil, ErrEmptyEntityName
 	}
 
 	// Group entity IDs by locale, deduplicating to avoid redundant DB queries.
@@ -129,6 +190,18 @@ func (t *translator[T]) LoadTranslations(ctx context.Context, entities []T) ([]T
 func (t *translator[T]) SaveTranslations(ctx context.Context, entities []T) error {
 	if len(entities) == 0 {
 		return nil
+	}
+
+	// Apply default context timeout if needed
+	ctx = t.contextWithDefault(ctx)
+
+	// Check if context is already done
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	if t.entityName == "" {
+		return ErrEmptyEntityName
 	}
 
 	// Group translations by locale for batch save.
@@ -242,24 +315,4 @@ func toLower(r rune) rune {
 		return r + ('a' - 'A')
 	}
 	return r
-}
-
-// GetEntityNameFromType returns the snake_case entity name derived from a type via reflection.
-// Use when you prefer not to implement TranslationEntityName() manually.
-// Example: "Product" → "product", "GeoTag" → "geo_tag"
-func GetEntityNameFromType[T any](t *T) string {
-	typ := reflect.TypeOf(t)
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	return toSnakeCase(typ.Name())
-}
-
-// GetEntityNameFromValue returns the snake_case entity name derived from any value via reflection.
-func GetEntityNameFromValue(v any) string {
-	typ := reflect.TypeOf(v)
-	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	return toSnakeCase(typ.Name())
 }
